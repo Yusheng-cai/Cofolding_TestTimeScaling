@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cofolding-tts"
+version = "0.1.0"
+description = "Test-time interventions on co-folding models, and the metrics to judge them"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Yusheng Cai" }]
+
+# Only what the inspect tier needs. The reproduce tier additionally needs torch
+# and a Boltz-2 install, which are not declared here because Boltz pins its own
+# CUDA-specific torch build and should be installed into its own environment.
+dependencies = [
+  "numpy>=1.26",
+  "gemmi>=0.6",
+  "rdkit>=2024.3",
+  "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".git", ".pytest_cache", "runs", "data"]

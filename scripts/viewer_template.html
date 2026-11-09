@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>8SGE pose viewer</title>
+<style>
+:root{
+  --bg:#f4f5f3; --surface:#fbfbfa; --stage:#e9ebe7;
+  --ink:#1f2320; --ink-2:#4e544f; --ink-3:#7d847e; --line:#d9ddd7;
+  --correct:#0072B2; --wrong:#D55E00; --crystal:#2a2e2b;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#161917; --surface:#1e221f; --stage:#121412;
+  --ink:#eef1ee; --ink-2:#aab1ab; --ink-3:#7d847e; --line:#32382f;
+  --correct:#56b4e9; --wrong:#f0893f; --crystal:#e4e8e3;
+  color-scheme:dark;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  line-height:1.5;padding:24px max(16px,env(safe-area-inset-right,0px)) 32px max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{margin:0;font-size:1.35rem;font-weight:600;letter-spacing:-.01em}
+.sub{margin:0;color:var(--ink-2);font-size:.88rem;max-width:62ch}
+.eyebrow{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px;align-items:start}
+@media (max-width:820px){.main{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;background:var(--stage);border:1px solid var(--line);
+  border-radius:10px;height:clamp(340px,60vh,560px);overflow:hidden;min-width:0}
+#gl{position:absolute;inset:0}
+.hint{position:absolute;left:10px;bottom:8px;font-family:var(--mono);font-size:.66rem;
+  color:var(--ink-3);pointer-events:none}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h2{margin:0 0 8px;font-size:.74rem;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--ink-3)}
+.row{display:grid;grid-template-columns:13px minmax(0,1fr) auto;gap:9px;align-items:center;
+  padding:6px 7px;border-radius:7px;border:1px solid transparent;background:none;
+  width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.row:hover{background:color-mix(in srgb,var(--ink) 6%,transparent)}
+.row[aria-pressed="false"]{opacity:.42}
+.chip{width:12px;height:12px;border-radius:3px}
+.rname{font-size:.82rem;font-weight:500;min-width:0}
+.rmeta{display:block;font-family:var(--mono);font-size:.64rem;color:var(--ink-3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rnum{font-family:var(--mono);font-size:.74rem;font-variant-numeric:tabular-nums;color:var(--ink)}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btn{font:inherit;font-size:.74rem;padding:5px 9px;border-radius:999px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer}
+.btn[aria-pressed="true"]{border-color:var(--correct);color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.74rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+footer{font-size:.72rem;color:var(--ink-3);font-family:var(--mono);line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">8SGE &middot; KLHDC2 &middot; ZWS &middot; Boltz-2</span>
+    <h1>The axis decides the pose</h1>
+    <p class="sub">All placements superposed into the crystal receptor frame by the
+      protein C-alpha alignment. Click a row to show or hide it.</p>
+  </header>
+  <div class="main">
+    <div class="stage"><div id="gl"></div><div class="hint">drag to rotate &middot; scroll to zoom</div></div>
+    <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+      <div class="card"><h2>Placements</h2><div id="rows"></div></div>
+      <div class="card"><h2>Scene</h2>
+        <div class="btns">
+          <button class="btn" id="bPocket" type="button" aria-pressed="true">Pocket</button>
+          <button class="btn" id="bCart" type="button" aria-pressed="true">Backbone</button>
+          <button class="btn" id="bReset" type="button">Recentre</button>
+        </div>
+      </div>
+      <div class="card"><h2>Legend</h2>
+        <div class="legend">
+          <span><i style="background:var(--crystal)"></i>crystal</span>
+          <span><i style="background:var(--correct)"></i>axis correct</span>
+          <span><i style="background:var(--wrong)"></i>axis flipped</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <footer id="foot"></footer>
+</div>
+__DATABLOCKS__
+<script type="application/json" id="metadata">__META__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.4.2/3Dmol-min.js"></script>
+<script>
+(function(){
+  var META=JSON.parse(document.getElementById('metadata').textContent);
+  var MODELS=META.models, POCKET=META.pocket;
+  function tok(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+  function col(m){return m.kind==='crystal'?tok('--crystal'):(m.kind==='correct'?tok('--correct'):tok('--wrong'));}
+  function block(id){var e=document.getElementById(id);return e?e.textContent:'';}
+  var shown={}, pocket=true, cart=true, viewer=null;
+  MODELS.forEach(function(m){shown[m.id]=true;});
+
+  var rows=document.getElementById('rows');
+  MODELS.forEach(function(m){
+    var b=document.createElement('button');
+    b.type='button'; b.className='row'; b.setAttribute('aria-pressed','true'); b.dataset.id=m.id;
+    b.innerHTML='<span class="chip" style="background:'+col(m)+'"></span>'+
+      '<span class="rname">'+m.label+'<span class="rmeta">'+m.run+'</span></span>'+
+      '<span class="rnum">'+(m.kind==='crystal'?'&mdash;':m.rmsd.toFixed(2)+' &#8491;')+'</span>';
+    b.addEventListener('click',function(){
+      shown[m.id]=!shown[m.id];
+      b.setAttribute('aria-pressed',shown[m.id]?'true':'false'); draw();
+    });
+    rows.appendChild(b);
+  });
+  document.getElementById('foot').textContent =
+    POCKET.length + ' pocket residues within 5 Å of the crystal ligand';
+
+  function draw(){
+    if(!viewer) return;
+    viewer.setStyle({},{}); 
+    if(cart) viewer.setStyle({model:0},{cartoon:{color:tok('--ink-3'),opacity:0.42,thickness:0.22}});
+    if(pocket) viewer.addStyle({model:0,resi:POCKET},{stick:{radius:0.10,color:tok('--ink-3')}});
+    MODELS.forEach(function(m){
+      if(!shown[m.id]) return;
+      viewer.addStyle({model:m.id},{stick:{radius:m.kind==='crystal'?0.17:0.14,color:col(m)}});
+    });
+    viewer.render();
+  }
+  function recentre(){ if(viewer){ viewer.zoomTo({model:1}); viewer.zoom(0.8); viewer.render(); } }
+  function start(){
+    if(typeof $3Dmol==='undefined'){document.querySelector('.hint').textContent='3D viewer failed to load';return;}
+    viewer=$3Dmol.createViewer(document.getElementById('gl'),{backgroundColor:tok('--stage'),antialias:true});
+    viewer.addModel(block('pdb_protein'),'pdb');
+    MODELS.forEach(function(m){viewer.addModel(block('pdb_'+m.id),'pdb');});
+    draw(); recentre();
+  }
+  document.getElementById('bPocket').addEventListener('click',function(e){
+    pocket=!pocket; e.currentTarget.setAttribute('aria-pressed',pocket?'true':'false'); draw();});
+  document.getElementById('bCart').addEventListener('click',function(e){
+    cart=!cart; e.currentTarget.setAttribute('aria-pressed',cart?'true':'false'); draw();});
+  document.getElementById('bReset').addEventListener('click',recentre);
+  if(window.matchMedia){var mq=window.matchMedia('(prefers-color-scheme: dark)');
+    (mq.addEventListener?mq.addEventListener.bind(mq,'change'):mq.addListener.bind(mq))(function(){
+      if(viewer){viewer.setBackgroundColor(tok('--stage'));draw();}});}
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',start);}else{start();}
+})();
+</script>
+</body>
+</html>

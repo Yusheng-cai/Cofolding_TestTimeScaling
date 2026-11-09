@@ -1,0 +1,11 @@
+# Raw model output. Each Boltz-2 run is ~1.6 MB; a full arm is gigabytes.
+/runs/
+
+# Unpacked from the vendored gzip at run time.
+/data/reference/8sge/msa_1A.csv
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
