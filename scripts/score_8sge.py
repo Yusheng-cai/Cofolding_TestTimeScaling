@@ -78,8 +78,9 @@ def main() -> int:
 
     pattern = re.compile(args.include) if args.include else None
     run_dirs = sorted(
-        d.parent for d in Path(args.runs).glob("*/boltz_results_inputs")
-        if pattern is None or pattern.search(d.parent.name)
+        {d.parent for d in Path(args.runs).glob("*/boltz_results_*")
+         if (d / "predictions").is_dir()
+         and (pattern is None or pattern.search(d.parent.name))}
     )
     if not run_dirs:
         print(f"no run directories under {args.runs}", file=sys.stderr)

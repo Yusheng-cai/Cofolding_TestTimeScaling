@@ -46,7 +46,9 @@ def prepare_inputs() -> Path:
     therefore only work on the machine that wrote it.
     """
 
-    out = RUNS / "_inputs"
+    # Named "inputs" because Boltz derives its output directory from this
+    # name: boltz_results_inputs, which is what score_8sge.py looks for.
+    out = RUNS / "inputs"
     out.mkdir(parents=True, exist_ok=True)
     msa = REFERENCE / "msa_1A.csv"
     if not msa.is_file():
@@ -88,7 +90,10 @@ def main() -> int:
         if (out_dir / "collection.json").is_file():
             print(f"[{draw}/{args.draws}] {name} already done, skipping")
             continue
-        cmd = [args.python, "-m", "cofolding_tts.intervene",
+        # Invoked by file path, not with -m: the Boltz environment is a separate
+        # interpreter that does not have this package installed, and the runner
+        # has no first-party imports, so it runs standalone.
+        cmd = [args.python, str(ROOT / "src" / "cofolding_tts" / "intervene.py"),
                "--inputs", str(inputs),
                "--seed", str(args.seed),
                "--lam", "0",

@@ -60,6 +60,7 @@ additive pair bias, so that bias is where a z-side intervention has to land.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -565,6 +566,40 @@ def install_msa_recorder(log: list):
     return state
 
 
+def checkpoint_sha256(path):
+    """SHA-256 of the checkpoint actually used, cached beside it.
+
+    This used to be a hardcoded constant, which silently recorded the wrong
+    provenance for anyone running a different checkpoint. Hashing a multi-
+    gigabyte file on every run is wasteful, so the digest is written to a
+    sidecar and reused while the checkpoint's size and mtime are unchanged.
+    """
+    if not path:
+        return "unavailable"
+    target = Path(path)
+    if not target.is_file():
+        return "unavailable"
+    stat = target.stat()
+    stamp = f"{stat.st_size}:{int(stat.st_mtime)}"
+    sidecar = target.with_suffix(target.suffix + ".sha256")
+    try:
+        cached_stamp, cached_digest = sidecar.read_text().split(None, 1)
+        if cached_stamp == stamp:
+            return cached_digest.strip()
+    except Exception:
+        pass
+    digest = hashlib.sha256()
+    with target.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 22), b""):
+            digest.update(chunk)
+    value = digest.hexdigest()
+    try:
+        sidecar.write_text(f"{stamp} {value}\n")
+    except OSError:
+        pass          # a read-only checkpoint directory is not a failure
+    return value
+
+
 def git_revision():
     """The revision this run came from, or "unavailable" outside a work tree.
 
@@ -604,7 +639,7 @@ def main():
                          "Raw model internals: write under runs/, never the repository.")
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--log", required=True)
-    ap.add_argument("--inputs", default=str(ROOT / "runs" / "_inputs"),
+    ap.add_argument("--inputs", default=str(ROOT / "runs" / "inputs"),
                     help="directory of Boltz input YAMLs; scripts/run_8sge.py "
                          "materialises the vendored 8SGE system there")
     ap.add_argument("--experiment-id", default="8sge_slig_rescue",
@@ -715,9 +750,8 @@ def main():
         Path(args.log).write_text(json.dumps({
             "experiment": args.experiment_id,
             "git_revision": git_revision(),
-            "checkpoint": CHECKPOINT,
-            "checkpoint_sha256":
-                "090e82ac8c92f5e943fa1b39e7410a44027bea7243c0bbb3caa67a77fc1428e1",
+            "checkpoint": args.checkpoint,
+            "checkpoint_sha256": checkpoint_sha256(args.checkpoint),
             "regions": list(regions),
             "token_subset": list(token_subset),
             "intervention": args.intervention,
