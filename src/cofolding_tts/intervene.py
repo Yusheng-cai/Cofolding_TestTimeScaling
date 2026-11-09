@@ -614,6 +614,49 @@ def git_revision():
 
 
 def main():
+    """Run one prediction with one region of the trunk's output replaced.
+
+    THIS script is the program you launch. You never run `boltz predict`
+    yourself; this does it for you, from inside itself, and that inversion is
+    the whole design. Four phases, and the order of the middle two is the only
+    thing that makes any of it work:
+
+      1. Parse and validate the flags. Nothing has happened yet.
+
+      2. Install the hook. `install()` reaches into the imported Boltz module
+         and reassigns the name `sample` on its diffusion class to a function
+         of ours. Boltz is NOT running at this point: no checkpoint is loaded,
+         no model is built, no prediction has started. All that changed is
+         which function one name on one class points at.
+
+      3. Call Boltz. We build an ordinary `boltz predict` argument list and
+         call Boltz's own command-line entry point AS A FUNCTION, in this same
+         Python process. Boltz then runs completely normally. When its own
+         internal code reaches the handoff from trunk to diffusion and calls
+         `sample`, Python looks the name up on the class at that moment and
+         finds ours. Ours edits the ligand rows of the representation and then
+         calls Boltz's real method with them.
+
+         It has to be a function call rather than launching the `boltz`
+         program, because a separate process would get a fresh import of Boltz
+         and would never have executed our reassignment in step 2.
+
+         It also has to come after step 2. The lookup happens when the call
+         happens, so a hook installed afterwards has missed its moment.
+
+      4. Record what happened. The log captures the git revision, the
+         checkpoint and its digest, every resolved flag, and the shape and
+         norms of whatever was actually perturbed, so a run can be audited
+         without rerunning it. It is written in a `finally`, so a crashed run
+         still leaves a record saying how it crashed.
+
+    Boltz itself is never modified. Nothing is written to its source tree, the
+    reassignment lives only in this process, and the next process gets stock
+    Boltz-2. A run with no `--regions` installs the same hook and takes the
+    same code path, but the hook does nothing: that is the control arm.
+    """
+
+    # --- 1. flags ---------------------------------------------------------
     ap = argparse.ArgumentParser()
     ap.add_argument("--regions", default="",
                     help="comma-separated subset of " + ",".join(ATOMIC_REGIONS))
@@ -669,6 +712,10 @@ def main():
                          "applied; a diagnostic, it does not change the run")
     args = ap.parse_args()
 
+    # --- 2. validate the combination -------------------------------------
+    # Every check below refuses a request that would silently do something
+    # other than what it says, rather than letting it through and producing a
+    # run whose log does not describe it.
     regions = parse_regions(args.regions) if args.regions else ()
     if args.lam > 0.0 and not regions:
         raise SystemExit("--lam > 0 requires --regions")
@@ -696,6 +743,11 @@ def main():
         raise SystemExit("region s_all already covers every s row; do not combine "
                          "it with s_prot, s_lig, s_atoms or s_tokens")
 
+    # --- 3. install the hook, BEFORE Boltz exists -------------------------
+    # `log` is handed to install() and kept here. The patched function appends
+    # one entry per perturbed region while the prediction runs, and phase 5
+    # serialises this same list. That is how a record of what was edited comes
+    # back out of a function that has already returned.
     log = []
     install(regions, args.lam, args.direction_seed, args.legacy_direction, log,
             token_subset, args.intervention, args.dump_block, args.dump_block_only,
@@ -707,6 +759,10 @@ def main():
     if args.dump_msa:
         install_msa_recorder(msa_log)
 
+    # --- 4. run Boltz ------------------------------------------------------
+    # An ordinary `boltz predict` command line. Everything here is a stock
+    # Boltz flag; none of it mentions the intervention, because the
+    # intervention is not a flag Boltz knows about. It is already installed.
     argv = ["boltz", "predict", args.inputs,
             "--out_dir", args.out_dir, "--cache", args.cache,
             "--model", "boltz2", "--checkpoint", args.checkpoint,
@@ -717,12 +773,19 @@ def main():
             "--num_workers", "1", "--seed", str(args.seed),
             "--max_msa_seqs", "8192", "--subsample_msa", "--num_subsampled_msa", "1024",
             "--no_kernels"]
+    # Boltz's CLI is a click command that reads sys.argv in places, so set it
+    # as well as passing the arguments explicitly below.
     sys.argv = argv
     started = time.monotonic()
     status = "ok"
     try:
+        # The handoff. Importing and calling Boltz's entry point here, rather
+        # than launching the `boltz` executable, is what keeps the prediction
+        # in the same process as the hook installed in phase 3.
         from boltz.main import cli
         try:
+            # standalone_mode=False stops click from calling sys.exit() itself,
+            # so a failure comes back as an exception we can record.
             cli.main(args=argv[1:], standalone_mode=False)
         except SystemExit as exc:
             if exc.code not in (0, None):
@@ -732,6 +795,7 @@ def main():
     except Exception as exc:                      # record the failure, do not hide it
         status = f"failed: {type(exc).__name__}: {exc}"
         raise
+    # --- 5. record, whatever happened --------------------------------------
     finally:
         runtime = time.monotonic() - started
         peak = (torch.cuda.max_memory_allocated() / 2**20
