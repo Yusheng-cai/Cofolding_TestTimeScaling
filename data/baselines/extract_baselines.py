@@ -28,9 +28,35 @@ SOURCES = {
 }
 
 
+def familiarity(manifests: pathlib.Path, wanted: set[str]) -> dict[str, dict]:
+    """Per-system familiarity, as recorded in the input manifests.
+
+    The score is SuCOS shape x pocket quality-coverage against the closest system
+    released BEFORE the structural training cutoff, on 0-100. It says how much like
+    its training set a target looks, which is the first thing anyone asks when a
+    co-folding model fails.
+    """
+    import json
+    out: dict[str, dict] = {}
+    for path in sorted(manifests.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            continue
+        for sample in payload.get("samples", []):
+            pdb = str(sample.get("sample_id", ""))[:4].lower()
+            rnp = sample.get("runs_n_poses") or {}
+            record = rnp.get("nesso1_sep2021_familiarity")
+            if pdb in wanted and record and pdb not in out:
+                out[pdb] = dict(record, manifest=path.name)
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", required=True, help="the reports/ directory to read")
+    ap.add_argument("--manifests", default=None,
+                    help="the data/manifests/ directory; familiarity is read from there")
     ap.add_argument("--out", default=str(pathlib.Path(__file__).parent / "control_poses.csv"))
     args = ap.parse_args()
     src = pathlib.Path(args.source)
@@ -50,6 +76,23 @@ def main() -> int:
         w = csv.DictWriter(fh, fieldnames=list(out_rows[0]))
         w.writeheader()
         w.writerows(out_rows)
+    if args.manifests:
+        systems = familiarity(pathlib.Path(args.manifests), set(SOURCES))
+        counts = {pdb: sum(r["pdb"] == pdb for r in out_rows) for pdb in SOURCES}
+        path = pathlib.Path(args.out).with_name("systems.csv")
+        with path.open("w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["pdb", "familiarity_0_to_100", "closest_pre_cutoff_system",
+                        "closest_system_release_date", "structural_training_cutoff",
+                        "n_control_draws", "manifest"])
+            for pdb, rec in sorted(systems.items()):
+                w.writerow([pdb, f'{rec["similarity_score_0_to_100"]:.1f}',
+                            rec["closest_pre_cutoff_system"],
+                            rec["closest_system_release_date"],
+                            rec["structural_training_cutoff"],
+                            counts[pdb], rec["manifest"]])
+        print(f"{len(systems)} systems -> {path}")
+
     print(f"{len(out_rows)} rows -> {args.out}")
     for rel, h in digests.items():
         print(f"  {h}  {rel}")

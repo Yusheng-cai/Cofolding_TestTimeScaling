@@ -1,0 +1,5 @@
+pdb,familiarity_0_to_100,closest_pre_cutoff_system,closest_system_release_date,structural_training_cutoff,n_control_draws,manifest
+7ftm,0.0,5vdt__1__1.A__1.D,2017-09-27,2021-09-30,32,exp033_boltz2_7ftm_multisample.json
+8cjg,0.0,3f8r__1__1.A_1.B__1.E,2009-01-13,2021-09-30,20,exp041_boltz2_best_of_n_familiarity0_40.json
+8jjq,0.0,7br3__1__1.A__1.L,2020-10-07,2021-09-30,20,exp041_boltz2_best_of_n_familiarity0_40.json
+8sge,29.5,6do5__1__1.A__1.D,2018-12-19,2021-09-30,25,exp034_boltz2_8sge_multisample.json

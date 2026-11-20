@@ -11,6 +11,22 @@ are in this file; these are the numbers every arm has to be read against.
 | `source_correct` | the source experiment's own correctness flag, where it had one; its criterion is per-system, so prefer recomputing from the RMSD |
 | `source` | the file the row came from |
 
+`systems.csv` — one row per system: the **familiarity** score (SuCOS shape x pocket
+quality-coverage against the closest system released before the 2021-09-30 structural
+training cutoff, on 0-100), which system that was and when it was released, and how
+many control draws are in `control_poses.csv`.
+
+| PDB | familiarity | closest pre-cutoff system | released |
+| --- | --- | --- | --- |
+| 8SGE | 29.5 | `6do5__1__1.A__1.D` | 2018-12-19 |
+| 7FTM | 0.0 | `5vdt__1__1.A__1.D` | 2017-09-27 |
+| 8CJG | 0.0 | `3f8r__1__1.A_1.B__1.E` | 2009-01-13 |
+| 8JJQ | 0.0 | `7br3__1__1.A__1.L` | 2020-10-07 |
+
+Read that column beside the rates: the three systems at 0.0 include the one the model
+handles best, and the only system with real familiarity is the one it fails 24 times
+in 25. Familiarity is not what is failing here.
+
 ## Where each system's draws come from
 
 | PDB | n | sampling | source file | sha256 (first 16) |
