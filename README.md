@@ -112,6 +112,17 @@ per-step redraw is the whole of that difference.
 
 Runs are resumable and land under `runs/`, which is not tracked.
 
+## Notebooks
+
+Three, each self-contained and runnable with no GPU: `numpy`, `matplotlib` and this
+package, reading only committed data.
+
+| notebook | what it shows |
+| --- | --- |
+| `notebooks/01_baseline.ipynb` | the failure on 8SGE, recomputed from coordinates and checked against the stored values |
+| `notebooks/02_baselines.ipynb` | the unperturbed rate on all four scored systems, with each one's familiarity beside it |
+| `notebooks/03_tcp_arms.ipynb` | Boltz-Perturb's TCP against ours, and the frozen control that isolates the redraw |
+
 ## What is in here
 
 ```
@@ -123,7 +134,10 @@ src/cofolding_tts/
   lddt.py        lDDT-PLI
   pose.py        Kabsch and mapped RMSD, numpy only
   pdbio.py       column-correct PDB records
+  basin.py       which rotamer a pose landed in; the criterion everything scores by
 data/reference/  the 8SGE inputs a run needs: MSA, sequences, input template
+data/baselines/  unperturbed draws and familiarity for the four scored systems
+data/tcp/        the five 8SGE arms, one row per pose
 pdb/             deposited structures for the eight systems, with checksums
 results/         8sge_per_pose.csv — one row per draw — and figures
 docs/method.md   what the intervention is and why it is where it is
