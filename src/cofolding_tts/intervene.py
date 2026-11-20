@@ -654,6 +654,72 @@ def git_revision():
         return "unavailable"
 
 
+SUPPORTED_BOLTZ = ("2.2.1",)
+
+# The hooks reassign named attributes of named Boltz classes. If a release moves or
+# renames one of these, the patch would install cleanly and do nothing, and the run
+# would look like a null result instead of a broken one. That failure is expensive and
+# silent, so it is checked before the model is built rather than inferred afterwards.
+PATCH_TARGETS = (
+    ("boltz.model.modules.diffusionv2", "AtomDiffusion",
+     ("sample", "preconditioned_network_forward")),
+    ("boltz.model.modules.encodersv2", "SingleConditioning", ("forward",)),
+    ("boltz.model.modules.diffusion_conditioning", "DiffusionConditioning", ("forward",)),
+)
+
+
+def _sibling(name: str):
+    """Import a module next to this file WITHOUT importing the package.
+
+    This file is launched by path from the Boltz environment, where cofolding_tts is
+    not installed (see AGENTS.md), so `from cofolding_tts import tcp` would fail there.
+    """
+    import importlib.util
+    path = Path(__file__).resolve().with_name(f"{name}.py")
+    spec = importlib.util.spec_from_file_location(f"_cofolding_tts_{name}", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def require_boltz(allow_any: bool = False) -> str:
+    """Fail loudly, before anything is patched, if this is not a Boltz we can hook."""
+    import importlib
+    import importlib.metadata as metadata
+
+    try:
+        version = metadata.version("boltz")
+    except metadata.PackageNotFoundError:
+        raise SystemExit(
+            "Boltz-2 is not installed in this interpreter.\n"
+            "  The reproduce tier needs it in its OWN environment:\n"
+            "    bash scripts/setup_boltz.sh\n"
+            "  then pass that interpreter: run_8sge.py --python .venv-boltz/bin/python")
+
+    missing = []
+    for module_name, class_name, attributes in PATCH_TARGETS:
+        try:
+            owner = getattr(importlib.import_module(module_name), class_name)
+        except (ImportError, AttributeError):
+            missing.append(f"{module_name}.{class_name}")
+            continue
+        missing += [f"{class_name}.{a}" for a in attributes if not hasattr(owner, a)]
+    if missing:
+        raise SystemExit(
+            f"boltz {version} does not expose the attributes this intervention patches: "
+            + ", ".join(missing)
+            + f"\n  Supported: {', '.join(SUPPORTED_BOLTZ)}. Install one of those, or "
+              "update PATCH_TARGETS and re-verify every arm.")
+    if version not in SUPPORTED_BOLTZ and not allow_any:
+        raise SystemExit(
+            f"boltz {version} is installed; every number in this repository was produced "
+            f"with {', '.join(SUPPORTED_BOLTZ)}.\n"
+            "  The patch targets all exist, so it will probably run, but the arms would "
+            "no longer be comparable with the recorded ones.\n"
+            "  Pass --allow-any-boltz to proceed deliberately.")
+    return version
+
+
 def main():
     """Run one prediction with one region of the trunk's output replaced.
 
@@ -723,6 +789,10 @@ def main():
                          "denoiser call. Same arrays as exp067_xhat0_trajectory "
                          "(xhat0, x, sigma), so exp067's analysis reads them directly. "
                          "Raw model internals: write under runs/, never the repository.")
+    ap.add_argument("--allow-any-boltz", action="store_true",
+                    help="run against a Boltz release other than "
+                         + ", ".join(SUPPORTED_BOLTZ) + "; the arms are then not "
+                         "comparable with the recorded ones")
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--log", required=True)
     ap.add_argument("--inputs", default=str(ROOT / "runs" / "inputs"),
@@ -839,7 +909,9 @@ def main():
         if not args.tcp:
             raise SystemExit("--lam is required unless the run is --tcp only")
         args.lam = 0.0
+    boltz_version = require_boltz(args.allow_any_boltz)
     log = []
+    log.append({"event": "environment", "boltz_version": boltz_version})
     install(regions, args.lam, args.direction_seed, args.legacy_direction, log,
             token_subset, args.intervention, args.dump_block, args.dump_block_only,
             args.hook, args.n_channels, args.channel_order,
@@ -848,7 +920,7 @@ def main():
         # Installed on top of install() above, never instead of it: install() is also
         # what writes the provenance record, and a --tcp-only run still takes the
         # control path through it with lam = 0 and no regions.
-        from cofolding_tts import tcp as tcp_mod
+        tcp_mod = _sibling("tcp")
         t_end, t_start = (float(x) for x in args.tcp_window.split(","))
         if not 0.0 <= t_end < t_start <= 1.0:
             raise SystemExit("--tcp-window must be t_end,t_start with 0 <= t_end < "

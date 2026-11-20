@@ -74,7 +74,15 @@ rather than running a sequence alignment to find it.
 Entry points are invoked by **file path**, not `-m`:
 `python src/cofolding_tts/intervene.py ...`. The Boltz environment does not have this
 package installed, so `-m cofolding_tts.intervene` fails there. `run_8sge.py` passes
-`--python` through to the subprocess for this reason.
+`--python` through to the subprocess for this reason. For the same reason
+`intervene.py` reaches its siblings through `_sibling("tcp")`, which loads the file
+next to it; an ordinary `from cofolding_tts import ...` raises there.
+
+`scripts/setup_boltz.sh` builds that environment with `boltz==2.2.1`, the version
+every recorded number was produced with. `require_boltz()` runs before anything is
+patched and refuses any other version unless `--allow-any-boltz` is passed, because a
+release that moved one of the patch targets would install cleanly and silently do
+nothing.
 
 The checkpoint and cache are never vendored and never hardcoded. They come from
 `--checkpoint` / `--cache`, defaulting to `$BOLTZ_CHECKPOINT` and `$BOLTZ_CACHE`.

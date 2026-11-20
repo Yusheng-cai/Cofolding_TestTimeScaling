@@ -68,14 +68,27 @@ python scripts/figure_8sge.py       # -> results/figures/8sge_rescue.png
 python scripts/viewer_8sge.py       # -> results/figures/8sge_viewer.html
 ```
 
-**Reproduce** — needs a GPU, a Boltz-2 install, and the checkpoint and cache, neither
-of which is vendored.
+**Reproduce** — needs a GPU. Boltz-2 is not vendored here, and neither is the
+checkpoint or the cache, so one script installs the first for you:
+
+```bash
+bash scripts/setup_boltz.sh          # a separate venv with boltz==2.2.1
+```
+
+Boltz goes in its own environment because it pins a CUDA-specific torch build, and
+the inspect tier above is meant to keep working with no torch at all. If you would
+rather have one environment, `pip install -e ".[reproduce]"` does the same install.
+
+Every number here was produced with **boltz 2.2.1**. The intervention patches named
+attributes of named Boltz classes, so a release that moves one would install cleanly
+and silently do nothing; the runner refuses to start on any other version unless you
+pass `--allow-any-boltz`.
 
 ```bash
 export BOLTZ_CHECKPOINT=/path/to/boltz2_conf.ckpt
 export BOLTZ_CACHE=/path/to/boltz/cache
 
-python scripts/run_8sge.py --arm control --draws 30   # ~1 min per draw on one GPU
+python scripts/run_8sge.py --arm control --draws 30 --python .venv-boltz/bin/python
 python scripts/run_8sge.py --arm gauss   --draws 40
 python scripts/score_8sge.py --runs runs
 ```

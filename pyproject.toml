@@ -23,6 +23,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# `pip install -e ".[reproduce]"` pulls Boltz-2 and, through it, torch. Prefer
+# scripts/setup_boltz.sh, which puts Boltz in its own environment: it pins a
+# CUDA-specific torch build that is easy to collide with.
+reproduce = ["boltz==2.2.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
