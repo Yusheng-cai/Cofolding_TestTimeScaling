@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """[inspect] The 8SGE rescue figure, from committed data. No GPU, no run directories.
 
-Two panels against the same arm rows:
+Two panels over the same rows:
 
   left   where the ligand ends up, as RMSD to the crystal
   right  which way round the hindered axis is, as the C12-C11-N1-C3 torsion
 
-Reading them together is the point. The axis is not a correlate of the placement;
-it is the placement. A pose on the wrong side of the axis cannot be seated, because
-the two halves of the molecule have swapped sides of the pocket.
+The unit of a row is a *conditioning* (one model seed), not a replicate. The top
+row is the unperturbed scan: 41 conditionings, one pose each, because an
+unperturbed run has no other source of randomness. Every row below it is 40 draws
+at one fixed conditioning, differing only in the noise that replaced the ligand's
+trunk rows, with that conditioning's own unperturbed pose marked as a diamond.
+
+Read the two panels together. The axis usually decides the placement -- but seed
+14 is the exception that keeps the claim honest, where the axis flips and the
+ligand still does not seat.
 
     python scripts/figure_8sge.py
 """
@@ -17,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 from pathlib import Path
 
 import numpy as np
@@ -33,15 +40,29 @@ CRYSTAL_TORSION = -101.4
 BLUE, VERM, INK, MUT = "#0072B2", "#D55E00", "#2a2a28", "#7a7a76"
 SURFACE = "#fcfcfb"
 
-HEADLINE = ["control", "gauss-s_lig"]
+SCAN = "control_scan"
+
+# Row order, and the control pose that belongs beside each row. Grouped by what
+# the unperturbed model does at that conditioning: four it gets wrong, then the
+# one it already gets right, which is a harm control rather than a rescue.
+ORDER = [SCAN, "gauss-s_lig", "gauss-s_lig-s12", "gauss-s_lig-s14",
+         "gauss-s_lig-s05", "gauss-s_lig-s59"]
 LABELS = {
-    "control": "control\nunperturbed",
-    "gauss-s_lig": "gauss s_lig\nseed 42",
+    SCAN:              "unperturbed scan\n41 conditionings",
+    "gauss-s_lig":     "seed 42",
     "gauss-s_lig-s12": "seed 12",
-    "gauss-s_lig-s59": "seed 59",
     "gauss-s_lig-s14": "seed 14",
     "gauss-s_lig-s05": "seed 5",
+    "gauss-s_lig-s59": "seed 59\n(already correct)",
 }
+CONTROL_OF = {"gauss-s_lig": "baseline_lam0", "gauss-s_lig-s12": "control_lam0p00_d12",
+              "gauss-s_lig-s14": "control_lam0p00_d14", "gauss-s_lig-s05": "control_lam0p00_d05",
+              "gauss-s_lig-s59": "control_lam0p00_d59"}
+# The unbiased scan is model seeds 1-40 (the `control` arm) plus seed 42, which was
+# run separately as `baseline_lam0`. Seed 59 is deliberately NOT in it: that
+# conditioning was added later because the model already succeeds there, so counting
+# it among the scan would inflate the unperturbed success rate.
+SCAN_MAX = 40
 
 
 def style() -> None:
@@ -61,6 +82,24 @@ def style() -> None:
     })
 
 
+def load(path: str):
+    """Group the per-pose table into plot rows, and pick out each row's control."""
+    raw = list(csv.DictReader(open(path)))
+    by_run = {r["run"]: r for r in raw}
+    groups: dict[str, list] = {a: [] for a in ORDER}
+    for r in raw:
+        if r["arm"] in groups:
+            groups[r["arm"]].append(r)
+        elif r["arm"] == "control":
+            m = re.search(r"_d(\d+)$", r["run"])
+            if m and int(m.group(1)) <= SCAN_MAX:
+                groups[SCAN].append(r)
+    if "baseline_lam0" in by_run:
+        groups[SCAN].append(by_run["baseline_lam0"])
+    controls = {a: by_run[k] for a, k in CONTROL_OF.items() if k in by_run}
+    return [a for a in ORDER if groups[a]], groups, controls
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -68,16 +107,14 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "results" / "figures" / "8sge_rescue.png"))
     args = ap.parse_args()
 
-    rows = [r for r in csv.DictReader(open(args.per_pose)) if r["arm"] in LABELS]
-    if not rows:
+    order, groups, controls = load(args.per_pose)
+    if not order:
         raise SystemExit(f"no usable rows in {args.per_pose}")
-    order = HEADLINE + [a for a in LABELS if a not in HEADLINE
-                        and any(r["arm"] == a for r in rows)]
 
     style()
-    fig = plt.figure(figsize=(10.4, 0.62 * len(order) + 2.4))
+    fig = plt.figure(figsize=(10.4, 0.70 * len(order) + 2.9))
     gs = fig.add_gridspec(1, 2, width_ratios=[1, 1], wspace=0.14,
-                          left=0.135, right=0.985, top=0.80, bottom=0.17)
+                          left=0.155, right=0.985, top=0.775, bottom=0.155)
     rng = np.random.default_rng(0)
 
     panels = [
@@ -89,19 +126,24 @@ def main() -> int:
     for ax, column, title, xlabel, marker in panels:
         for i, arm in enumerate(order):
             y = len(order) - 1 - i
-            arm_rows = [r for r in rows if r["arm"] == arm]
             for correct, colour in ((1, BLUE), (0, VERM)):
-                v = np.array([float(r[column]) for r in arm_rows
+                v = np.array([float(r[column]) for r in groups[arm]
                               if int(r["axis_correct"]) == correct])
                 v = v[np.isfinite(v)]
-                if not len(v):
-                    continue
-                ax.scatter(v, y + rng.uniform(-0.17, 0.17, len(v)), s=22, color=colour,
-                           alpha=0.8, linewidths=0.5, edgecolor=SURFACE, zorder=3)
+                if len(v):
+                    ax.scatter(v, y + rng.uniform(-0.19, 0.19, len(v)), s=22,
+                               color=colour, alpha=0.8, linewidths=0.5,
+                               edgecolor=SURFACE, zorder=3)
+            c = controls.get(arm)
+            if c is not None and np.isfinite(float(c[column])):
+                ax.scatter([float(c[column])], [y], s=46, marker="D",
+                           facecolor="none", edgecolor=INK, linewidths=1.1, zorder=5)
         ax.set_yticks(range(len(order)))
         ax.set_yticklabels([LABELS[a] for a in reversed(order)], fontsize=7.6,
                            color=INK, linespacing=1.3)
         ax.set_ylim(-0.6, len(order) - 0.4)
+        # Separate the unperturbed scan from the fixed-conditioning rows below it.
+        ax.axhline(len(order) - 1.5, color="#d8d8d2", lw=0.8, zorder=1)
         ax.set_title(title, color=INK, loc="left", pad=7)
         ax.set_xlabel(xlabel)
         ax.grid(axis="x", alpha=0.10, lw=0.5)
@@ -119,24 +161,37 @@ def main() -> int:
             ax.set_xticks([-180, -90, 0, 90, 180])
             ax.set_yticklabels([])
 
-    counts = {a: (sum(int(r["placed_under_2A"]) for r in rows if r["arm"] == a),
-                  sum(r["arm"] == a for r in rows)) for a in HEADLINE if a in order}
-    headline = "   ".join(
-        f"{LABELS[a].splitlines()[0]}: {hit} of {n} placed under 2 Å"
-        for a, (hit, n) in counts.items())
-    fig.suptitle("8SGE: destroying the ligand's trunk representation recovers the pose",
-                 x=0.135, ha="left", y=0.965, fontsize=11, color=INK)
-    fig.text(0.135, 0.895, headline, ha="left", fontsize=8.2, color=MUT)
+    scan_hits = sum(int(r["placed_under_2A"]) for r in groups[SCAN])
+    rescued = [a for a in order if a in CONTROL_OF
+               and not int(controls[a]["placed_under_2A"])
+               and sum(int(r["placed_under_2A"]) for r in groups[a]) > 1]
+    sub = (f"unperturbed: {scan_hits} of {len(groups[SCAN])} conditionings placed "
+           f"under 2 Å    with s_lig destroyed: {len(rescued)} of "
+           f"{len(CONTROL_OF) - 1} wrong conditionings become reachable in 40 draws")
+    fig.suptitle("8SGE: destroying the ligand's trunk representation makes the "
+                 "right pose reachable",
+                 x=0.155, ha="left", y=0.975, fontsize=11, color=INK)
+    fig.text(0.155, 0.925, sub, ha="left", fontsize=8.2, color=MUT)
     fig.legend(handles=[Line2D([], [], marker="o", ls="", color=BLUE, markersize=5,
                                label="axis matches the crystal"),
                         Line2D([], [], marker="o", ls="", color=VERM, markersize=5,
-                               label="axis flipped")],
-               frameon=False, fontsize=7.8, labelcolor=INK, ncol=2,
-               loc="upper right", bbox_to_anchor=(0.985, 0.985))
+                               label="axis flipped"),
+                        Line2D([], [], marker="D", ls="", markerfacecolor="none",
+                               markeredgecolor=INK, markersize=6,
+                               label="unperturbed pose at this conditioning")],
+               frameon=False, fontsize=7.8, labelcolor=INK, ncol=3,
+               loc="upper left", bbox_to_anchor=(0.148, 0.898),
+               handletextpad=0.4, columnspacing=1.6)
 
-    out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=200)
     print(f"wrote {out}")
+    for a in order:
+        n = len(groups[a])
+        hit = sum(int(r["placed_under_2A"]) for r in groups[a])
+        ax_ok = sum(int(r["axis_correct"]) for r in groups[a])
+        print(f"  {LABELS[a].splitlines()[0]:<24} n={n:>3}  axis {ax_ok:>3}  under2A {hit:>3}")
     return 0
 
 
