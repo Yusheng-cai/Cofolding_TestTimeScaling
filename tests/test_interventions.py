@@ -310,3 +310,61 @@ def test_all_channels_matches_the_unrestricted_arm():
     a, _ = apply("gauss", _block().clone(), key="s_lig")
     b, _ = apply("gauss", _block().clone(), key="s_lig", n_channels=5)
     assert torch.equal(a, b)
+
+
+# --- lerp: the variance-preserving path from the real block to `gauss` -----------
+
+def _lerp_block(sub, lam, seed=7):
+    """The formula the lerp branch applies, written out independently of the CLI."""
+    import math
+    import torch
+    mu = sub.float().mean(dim=1, keepdim=True)
+    sd = sub.float().std(dim=1, keepdim=True)
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    eps = torch.randn(sub.shape, generator=gen, dtype=torch.float32)
+    return mu + lam * (sub.float() - mu) + math.sqrt(max(0.0, 1 - lam * lam)) * sd * eps
+
+
+def test_lerp_endpoints_are_control_and_gauss():
+    """lam = 1 returns the block untouched; lam = 0 is exactly the gauss formula."""
+    import torch
+    torch.manual_seed(0)
+    sub = torch.randn(1, 33, 384) * 40 + 3
+    assert torch.allclose(_lerp_block(sub, 1.0), sub.float(), atol=1e-4)
+
+    mu = sub.float().mean(dim=1, keepdim=True)
+    sd = sub.float().std(dim=1, keepdim=True)
+    gen = torch.Generator(device="cpu").manual_seed(7)
+    eps = torch.randn(sub.shape, generator=gen, dtype=torch.float32)
+    assert torch.allclose(_lerp_block(sub, 0.0), mu + sd * eps, atol=1e-4)
+
+
+def test_lerp_preserves_per_channel_variance():
+    """Every lam gives the same per-channel spread, so the sweep is not confounded.
+
+    The naive convex mix (1-lam)*sub + lam*noise does not: at lam = 0.5 its variance
+    is half, a 29% shrink in scale, which would be a second intervention riding along
+    with the first.
+    """
+    import torch
+    torch.manual_seed(1)
+    sub = torch.randn(1, 33, 384) * 40 + 3
+    reference = sub.float().std(dim=1).mean().item()
+    for lam in (1.0, 0.75, 0.5, 0.25, 0.0, -0.5, -1.0):
+        got = _lerp_block(sub, lam).std(dim=1).mean().item()
+        assert abs(got - reference) / reference < 0.08, (lam, got, reference)
+
+    naive = 0.5 * sub.float() + 0.5 * (
+        sub.float().mean(dim=1, keepdim=True)
+        + sub.float().std(dim=1, keepdim=True)
+        * torch.randn(sub.shape, generator=torch.Generator().manual_seed(7)))
+    assert naive.std(dim=1).mean().item() < 0.85 * reference
+
+
+def test_lerp_negative_reflects_the_deviation():
+    """lam = -1 is the block reflected through its own mean, with no noise left."""
+    import torch
+    torch.manual_seed(2)
+    sub = torch.randn(1, 33, 384) * 40 + 3
+    mu = sub.float().mean(dim=1, keepdim=True)
+    assert torch.allclose(_lerp_block(sub, -1.0), mu - (sub.float() - mu), atol=1e-4)

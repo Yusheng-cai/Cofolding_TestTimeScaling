@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import math
 import json
 import os
 import subprocess
@@ -93,7 +94,7 @@ class _BlockDumped(Exception):
 
 ATOMIC_REGIONS = ("s_prot", "s_lig", "z_pp", "z_pl", "z_lig", "s_atoms",
                   "s_tokens", "s_all")
-INTERVENTIONS = ("additive", "mean", "gauss", "shuffle")
+INTERVENTIONS = ("additive", "mean", "gauss", "shuffle", "lerp", "inject")
 S_REGIONS = ("s_prot", "s_lig", "s_atoms", "s_tokens", "s_all")
 
 
@@ -239,7 +240,8 @@ def install_tracer(store):
 
 def install(regions, lam, base_seed, legacy, log, token_subset=(),
             intervention="additive", dump_dir=None, dump_only=False,
-            hook="sample", n_channels=0, channel_order="top"):
+            hook="sample", n_channels=0, channel_order="top",
+            inject_block=None):
     from boltz.model.modules.diffusionv2 import AtomDiffusion
 
     original = AtomDiffusion.sample
@@ -302,6 +304,45 @@ def install(regions, lam, base_seed, legacy, log, token_subset=(),
             mu, sd = channel_moments(sub)
             eps, seed = direction(sub, key)
             new = (mu + sd * eps.float()).to(dtype=sub.dtype)
+        elif intervention == "inject":
+            # Transplant: overwrite the region with a block saved from ANOTHER run by
+            # --dump-block. Unlike every other arm here this is not a deletion -- it
+            # substitutes one real trunk output for another, which is the only way to
+            # ask what the block SAYS rather than whether it was necessary. The donor
+            # must have the same shape, and its path is recorded in the run log so a
+            # transplanted arm can always be traced back to its donor.
+            if inject_block is None:
+                raise SystemExit("--intervention inject requires --inject-block")
+            donor = torch.load(inject_block, map_location="cpu", weights_only=True)
+            if tuple(donor.shape) != tuple(sub.shape):
+                raise SystemExit(
+                    f"donor block {tuple(donor.shape)} does not match the region "
+                    f"{tuple(sub.shape)}; injecting it would be meaningless")
+            new = donor.to(device=sub.device, dtype=sub.dtype)
+        elif intervention == "lerp":
+            # Variance-preserving path between the block the trunk produced and the
+            # `gauss` replacement, parameterised by --lam:
+            #
+            #     new = mu + lam * (sub - mu) + sqrt(1 - lam^2) * sd * eps
+            #
+            # lam = 1 returns `sub` exactly (the control), lam = 0 is `gauss`, and
+            # lam < 0 reflects the block's deviation through its own mean while
+            # keeping the noise term, so the arm asks whether the trunk's opinion
+            # can be inverted rather than only erased. The two coefficients satisfy
+            # a^2 + b^2 = 1, so every channel's variance is the same at every lam
+            # and the sweep cannot be confounded by a change of scale -- which a
+            # naive (1-lam)*sub + lam*noise mix would be, since independent terms
+            # make its midpoint shrink toward mu by about 29%.
+            #
+            # `mean` is NOT a point on this path: it is a = b = 0, the origin of
+            # the same plane, with neither deviation nor noise.
+            if not -1.0 <= lam <= 1.0:
+                raise SystemExit(f"--lam must be in [-1, 1] for lerp, got {lam}")
+            mu, sd = channel_moments(sub)
+            eps, seed = direction(sub, key)
+            noise = math.sqrt(max(0.0, 1.0 - lam * lam))
+            new = (mu + lam * (sub.float() - mu)
+                   + noise * sd * eps.float()).to(dtype=sub.dtype)
         elif intervention == "shuffle":
             # Permute the token rows among themselves. This destroys which token
             # owns which row just as completely as `mean` or `gauss` do, but every
@@ -664,7 +705,9 @@ def main():
                     help="Boltz-2 .ckpt; defaults to $BOLTZ_CHECKPOINT")
     ap.add_argument("--cache", default=DEFAULT_CACHE,
                     help="Boltz cache directory; defaults to $BOLTZ_CACHE or ~/.boltz")
-    ap.add_argument("--lam", type=float, required=True)
+    ap.add_argument("--lam", type=float, default=None,
+                    help="perturbation strength for --regions; required unless "
+                         "the run is --tcp only")
     ap.add_argument("--seed", type=int, default=42, help="model/diffusion seed")
     ap.add_argument("--direction-seed", type=int, default=12345,
                     help="seed for the perturbation direction, independent of --seed")
@@ -706,10 +749,46 @@ def main():
     ap.add_argument("--dump-block-only", action="store_true",
                     help="stop the run as soon as --dump-block has written; skips "
                          "diffusion, so no pose is produced")
+    ap.add_argument("--inject-block", default=None,
+                    help="path to a .pt block saved by --dump-block; used with "
+                         "--intervention inject to transplant one run's region "
+                         "into another")
     ap.add_argument("--dump-block", default=None,
                     help="directory to save each intervened region's UNPERTURBED "
                          "block to, as <key>.pt, before the intervention is "
                          "applied; a diagnostic, it does not change the run")
+    tcp_group = ap.add_argument_group(
+        "Boltz-Perturb TCP",
+        "Token Conditioning Perturbation, applied to `s` AFTER SingleConditioning. "
+        "This is a different insertion point from --regions s_lig, which replaces "
+        "rows of s_trunk on the way in. The two can be combined, but a paper arm "
+        "should use one at a time.")
+    tcp_group.add_argument("--tcp", action="store_true",
+                           help="install TCP on the ligand token rows of s")
+    tcp_group.add_argument("--tcp-noise-scale", type=float, default=0.9,
+                           help="their sigma_max; 0.9 is configuration C11, their best")
+    tcp_group.add_argument("--tcp-psi", type=float, default=0.7,
+                           help="interpolation back toward the unperturbed block")
+    tcp_group.add_argument("--tcp-window", default="0.2,0.6",
+                           help="t_end,t_start in their steering-time units. C11 is "
+                                "0.2,0.6, which is steps 80-159 at 200 sampling steps; "
+                                "C10 is 0.0,1.0, the whole trajectory")
+    tcp_group.add_argument("--tcp-frozen", action="store_true",
+                           help="draw the direction ONCE and reuse it at every step. "
+                                "Not a Boltz-Perturb option: it is the control that "
+                                "isolates the per-step redraw, and it is what our own "
+                                "s_lig ablation is structurally equivalent to")
+    tcp_group.add_argument("--tcp-no-rescale", action="store_true",
+                           help="skip their moment match (step 2 of make_s_noise_fn)")
+    tcp_group.add_argument("--tcp-no-norm-proj", action="store_true",
+                           help="skip their per-token norm projection (step 4). With "
+                                "both skipped the perturbation is no longer "
+                                "magnitude-preserving, which is the two-run check on "
+                                "whether those steps are mechanism or hygiene")
+    tcp_group.add_argument("--tcp-seed", type=int, default=777,
+                           help="seed for the TCP direction, drawn from a private CPU "
+                                "generator so the sampler's own noise stream is "
+                                "untouched and the arm stays comparable to the control")
     args = ap.parse_args()
 
     # --- 2. validate the combination -------------------------------------
@@ -728,14 +807,22 @@ def main():
     if {"s_atoms", "s_tokens"} <= set(regions):
         raise SystemExit("s_atoms and s_tokens both consume --token-subset; "
                          "use one of them")
-    if args.intervention != "additive":
+    if args.intervention not in ("additive", "lerp"):
         # lambda scales additive noise and has no meaning for a replacement, so
         # accepting it silently would record a parameter that did nothing.
+        # `lerp` is the exception: there lambda is the mixing coefficient, and it
+        # is meaningful across the whole range including 0 (which equals `gauss`)
+        # and negative values (which reflect the block through its own mean).
         if args.lam != 0.0:
             raise SystemExit(f"--intervention {args.intervention} has no scale "
                              f"parameter; pass --lam 0")
+    if args.intervention != "additive":
         if not regions:
             raise SystemExit(f"--intervention {args.intervention} requires --regions")
+    if args.intervention == "inject" and not args.inject_block:
+        raise SystemExit("--intervention inject requires --inject-block")
+    if args.intervention == "lerp" and not -1.0 <= args.lam <= 1.0:
+        raise SystemExit(f"--intervention lerp needs --lam in [-1, 1], got {args.lam}")
     if "s_all" in regions and ({"s_prot", "s_lig", "s_atoms", "s_tokens"}
                                & set(regions)):
         # s_all is the union of the others, so a combination would apply two
@@ -748,10 +835,32 @@ def main():
     # one entry per perturbed region while the prediction runs, and phase 5
     # serialises this same list. That is how a record of what was edited comes
     # back out of a function that has already returned.
+    if args.lam is None:
+        if not args.tcp:
+            raise SystemExit("--lam is required unless the run is --tcp only")
+        args.lam = 0.0
     log = []
     install(regions, args.lam, args.direction_seed, args.legacy_direction, log,
             token_subset, args.intervention, args.dump_block, args.dump_block_only,
-            args.hook, args.n_channels, args.channel_order)
+            args.hook, args.n_channels, args.channel_order,
+            args.inject_block)
+    if args.tcp:
+        # Installed on top of install() above, never instead of it: install() is also
+        # what writes the provenance record, and a --tcp-only run still takes the
+        # control path through it with lam = 0 and no regions.
+        from cofolding_tts import tcp as tcp_mod
+        t_end, t_start = (float(x) for x in args.tcp_window.split(","))
+        if not 0.0 <= t_end < t_start <= 1.0:
+            raise SystemExit("--tcp-window must be t_end,t_start with 0 <= t_end < "
+                             "t_start <= 1")
+        log.append({"event": "tcp_settings", "noise_scale": args.tcp_noise_scale,
+                    "psi": args.tcp_psi, "t_end": t_end, "t_start": t_start,
+                    "frozen": args.tcp_frozen, "rescale": not args.tcp_no_rescale,
+                    "norm_proj": not args.tcp_no_norm_proj, "seed": args.tcp_seed,
+                    "source": tcp_mod.BP_SOURCE})
+        tcp_mod.install(args.tcp_noise_scale, args.tcp_psi, t_start, t_end,
+                        not args.tcp_no_rescale, not args.tcp_no_norm_proj,
+                        args.tcp_frozen, args.tcp_seed, log)
     trace_store = {"xhat0": [], "x": [], "sigma": []}
     if args.trace:
         install_tracer(trace_store)
@@ -827,6 +936,9 @@ def main():
             "direction_seed_base": args.direction_seed,
             "legacy_direction": args.legacy_direction,
             "dump_block": args.dump_block,
+            "inject_block": args.inject_block,
+            "inject_block_sha256": (checkpoint_sha256(args.inject_block)
+                                    if args.inject_block else None),
             "trace": args.trace,
             "trace_steps": trace_steps,
             "command": argv,

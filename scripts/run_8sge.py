@@ -64,7 +64,13 @@ def prepare_inputs() -> Path:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--arm", choices=("control", "gauss"), required=True)
+    ap.add_argument("--arm", required=True,
+                    choices=("control", "gauss", "tcp", "tcp-frozen", "tcp-c10"),
+                    help="control and gauss act on s_trunk; the tcp arms are "
+                         "Boltz-Perturb's perturbation of s. tcp is their C11 "
+                         "(steps 80-159), tcp-c10 the whole trajectory, "
+                         "tcp-frozen the same as tcp with the direction held "
+                         "fixed for the run")
     ap.add_argument("--draws", type=int, default=40,
                     help="number of direction seeds, 1..N")
     ap.add_argument("--seed", type=int, default=42,
@@ -103,6 +109,13 @@ def main() -> int:
         if args.arm == "gauss":
             cmd += ["--regions", "s_lig", "--intervention", "gauss",
                     "--direction-seed", str(draw)]
+        if args.arm.startswith("tcp"):
+            cmd += ["--tcp", "--tcp-seed", str(args.seed * 1000 + draw)]
+            if args.arm == "tcp-c10":
+                cmd += ["--tcp-window", "0.0,1.0"]
+            if args.arm == "tcp-frozen":
+                cmd += ["--tcp-frozen"]
+
         else:
             cmd += ["--regions", "", "--intervention", "additive"]
         cmd += passthrough
