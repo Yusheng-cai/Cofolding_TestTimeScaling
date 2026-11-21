@@ -114,7 +114,7 @@ Runs are resumable and land under `runs/`, which is not tracked.
 
 ## Notebooks
 
-Three, each self-contained and runnable with no GPU: `numpy`, `matplotlib` and this
+Four, each self-contained and runnable with no GPU: `numpy`, `matplotlib` and this
 package, reading only committed data.
 
 | notebook | what it shows |
@@ -122,6 +122,7 @@ package, reading only committed data.
 | `notebooks/01_baseline.ipynb` | the failure on 8SGE, recomputed from coordinates and checked against the stored values |
 | `notebooks/02_baselines.ipynb` | the unperturbed rate on all four scored systems, with each one's familiarity beside it |
 | `notebooks/03_tcp_arms.ipynb` | Boltz-Perturb's TCP against ours, and the frozen control that isolates the redraw |
+| `notebooks/04_committor.ipynb` | the committor along the hindered axis: two basins, a tilted landscape, and what the ablation does to it |
 
 ## What is in here
 
@@ -138,6 +139,7 @@ src/cofolding_tts/
 data/reference/  the 8SGE inputs a run needs: MSA, sequences, input template
 data/baselines/  unperturbed draws and familiarity for the four scored systems
 data/tcp/        the five 8SGE arms, one row per pose
+data/injection/  the step-140 injection ladder, both conditionings
 pdb/             deposited structures for the eight systems, with checksums
 results/         8sge_per_pose.csv — one row per draw — and figures
 docs/method.md   what the intervention is and why it is where it is
