@@ -16,12 +16,17 @@ Two things the panels are drawn to show:
 Colour is the axial torsion C12-C11-N1-C3, the order parameter that distinguishes
 the two rotamers, not a restatement of the x axis.
 
-The horizontal line is the lDDT-PLI cut that best separates RMSD < 2 A from the rest
-over all 300 poses (Youden's J, computed here, not a published threshold). It is
-drawn to be read against the vertical RMSD = 2 A line: the two off-diagonal quadrants
-are where the two metrics disagree, and the per-model counts are printed below. The
-cut is fitted on the same labels it is scored against, so it is optimistic -- and it
-is not a selection rule in any case, because lDDT-PLI needs the deposited complex.
+The horizontal line is Runs N' Poses' own success criterion, lDDT-PLI > 0.8, which
+that benchmark applies together with RMSD < 2 A. The two dashed lines therefore cut
+each panel into the benchmark's four outcomes, and the top-left box is what it would
+score as a success -- a stricter count than RMSD alone, and the one to quote when
+comparing against that paper.
+
+For reference the script also fits the cut that best separates RMSD < 2 A from the
+rest over these 300 poses (Youden's J) and prints it. It lands at 0.76, close to the
+published 0.8, which is a check on the criterion rather than a proposal: a cut fitted
+on the labels it is scored against is optimistic, and lDDT-PLI cannot select anything
+in any case, since it needs the deposited complex to compute.
 
     python scripts/figure_landscape.py
 """
@@ -48,6 +53,7 @@ MODELS = ["Boltz-2", "AlphaFold3", "Protenix"]
 MSA = "full 2633"
 RMSD_MAX = 10.0
 HIT = 2.0
+RNP_PLI = 0.8          # Runs N' Poses: success is RMSD < 2 A AND lDDT-PLI > 0.8
 
 
 def load(path: Path, msa: str) -> dict[str, dict[str, np.ndarray]]:
@@ -98,21 +104,23 @@ def main() -> int:
             ax.scatter(d["rmsd"][mask], d["pli"][mask], s=115, c=colour, alpha=0.85,
                        linewidths=0.9, edgecolors=fs.SURFACE, zorder=3, label=label)
         ax.axvline(HIT, color=fs.MUTED, lw=1.3, ls=(0, (3, 3)), zorder=1)
-        ax.axhline(sep.cut, color=fs.MUTED, lw=1.3, ls=(0, (3, 3)), zorder=1)
+        ax.axhline(RNP_PLI, color=fs.MUTED, lw=1.3, ls=(0, (3, 3)), zorder=1)
         ax.set_xlim(0, RMSD_MAX)
         ax.set_ylim(0.15, 0.97)
         ax.set_xticks([0, 2, 4, 6, 8, 10])
         fs.box(ax)
 
-        n_hit = int((d["rmsd"] < HIT).sum())
+        hit = d["rmsd"] < HIT
+        n_hit, n_rnp = int(hit.sum()), int((hit & (d["pli"] > RNP_PLI)).sum())
         fs.panel(fig, top, letter, dx=0.004 if col else -0.047, dy=0.020, text=model)
-        ax.annotate(fs.tex(rf"{n_hit}/{d['rmsd'].size} under 2\,\AA"),
+        ax.annotate(fs.tex(rf"{n_hit}/{d['rmsd'].size} under 2\,\AA, "
+                           rf"{n_rnp} also above 0.8"),
                     (0.965, 0.95), xycoords="axes fraction", ha="right", va="top",
-                    fontsize=14.5, color=fs.MUTED)
+                    fontsize=13.5, color=fs.MUTED)
         if col == 0:
             ax.set_ylabel("lDDT-PLI")
-            ax.annotate(fs.tex(rf"best cut, {sep.cut:.2f}"), (9.75, sep.cut + 0.012),
-                        ha="right", va="bottom", fontsize=13.5, color=fs.MUTED)
+            ax.annotate(fs.tex(r"Runs N' Poses success"), (9.75, RNP_PLI - 0.016),
+                        ha="right", va="top", fontsize=13.5, color=fs.MUTED)
             ax.legend(frameon=False, loc="lower right", fontsize=13.5,
                       handletextpad=0.25, borderaxespad=0.55, scatterpoints=1)
         else:
@@ -125,7 +133,11 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=220)
     print(f"wrote {out}")
-    print(f"  pooled lDDT-PLI cut {sep.cut:.3f}  J={sep.youden_j:.3f}  "
+    rnp = (pooled_rmsd < HIT) & (pooled_pli > RNP_PLI)
+    print(f"  Runs N' Poses success (RMSD < 2 A and lDDT-PLI > 0.8): "
+          f"{int(rnp.sum())}/{rnp.size}, against {int((pooled_rmsd < HIT).sum())}"
+          f"/{rnp.size} on RMSD alone")
+    print(f"  best-fit lDDT-PLI cut {sep.cut:.3f}  J={sep.youden_j:.3f}  "
           f"wrong poses above it={sep.accepted_negatives}  "
           f"right poses below it={sep.rejected_positives}  "
           f"(agrees with RMSD < 2 A on "
@@ -138,8 +150,9 @@ def main() -> int:
         above = d["pli"] >= sep.cut
         print(f"  {model:<12} n={d['rmsd'].size:3d}  <2A={int(hit.sum()):3d}  "
               f"crystal rotamer={int(d['axis'].sum()):3d}  in the 2.5-5 A gap={gap:3d}  "
-              f"miss above cut={int((above & ~hit).sum()):3d}  "
-              f"hit below cut={int((~above & hit).sum()):3d}  "
+              f"RNP success={int((hit & (d['pli'] > RNP_PLI)).sum()):3d}  "
+              f"miss above fitted cut={int((above & ~hit).sum()):3d}  "
+              f"hit below it={int((~above & hit).sum()):3d}  "
               f"misses top out at {d['pli'][~hit].max():.3f}")
     return 0
 

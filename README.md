@@ -5,6 +5,20 @@ accuracy scales with **familiarity** — how close a complex sits to something t
 model was trained on. Read as a coverage problem, that points at more data and more
 post-training.
 
+![success rate against similarity to the training set](results/figures/rnp_familiarity.jpg)
+
+Figure 1 of [Škrinjar, Eberhardt, Durairaj and
+Schwede](https://doi.org/10.1101/2025.02.03.636309), reproduced unmodified under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — the one figure here that
+is not ours; see `results/figures/PROVENANCE.md`. Success is RMSD < 2 Å **and**
+lDDT-PLI > 0.8, and the four methods are AlphaFold3, Protenix, Chai-1 and Boltz-1.
+
+The grey line is the one to look at. It is the best of the four methods' top-ranked
+models, picked with the answer in hand, and it runs above every individual method in
+every bin: the models fail on different systems, so a good fraction of the misses are
+already being produced by *somebody*. That is a selection and sampling statement, not
+a coverage one, and it is the opening this repository works in.
+
 This repository tests the other reading: that for at least some of these misses the
 right pose is already inside the model's reach and the sampler never visits it. If
 that holds, the miss is a **search** failure at inference, and the lever is
@@ -29,8 +43,9 @@ being hard, so the honest reading is that a population-level trend gives you no 
 on an individual complex — which is the case in which you would want to spend
 inference compute.
 
-Cells are not uniformly sampled and Protenix has only been run on 8SGE — read
-`data/cross_model/PROVENANCE.md` before quoting a rate.
+Cells are not uniformly sampled, a hit here is RMSD < 2 Å alone rather than the
+benchmark's stricter combined criterion, and Protenix has only been run on 8SGE —
+read `data/cross_model/PROVENANCE.md` before quoting a rate.
 
 ## There are two answers, not a spread
 
@@ -47,12 +62,13 @@ lobes are the two rotamers of one hindered bond, and the model picks one.
 
 Two things fall out of that panel and set up everything else here:
 
-- **The horizontal line is the best lDDT-PLI cut there is**: 0.76, fitted on these
-  300 poses against RMSD < 2 Å and agreeing with it on 284 of them. It is still not a
-  selection rule — lDDT-PLI draws its contact pairs from the deposited complex, so
-  computing it needs the answer it would stand in for — and it does not transfer:
-  wrong poses top out at 0.63 under Boltz-2, 0.73 under AlphaFold3 and 0.82 under
-  Protenix, which is why all 15 disagreements are in panel (c).
+- **The dashed lines are Runs N' Poses' own success criterion**, RMSD < 2 Å *and*
+  lDDT-PLI > 0.8, so the top-left box of each panel is what that benchmark would
+  score. It is stricter than RMSD alone and the gap is not small: Protenix's 64
+  sub-2 Å poses are 25 successes, because a pose can be close and still have given up
+  contacts. The best cut these 300 poses can support is 0.76, near the published 0.8
+  — but no cut on lDDT-PLI selects anything in practice, since it draws its contact
+  pairs from the deposited complex and so needs the answer it would stand in for.
 - **The right axis is necessary, not sufficient.** AlphaFold3's green points at
   6–9 Å are the crystal's rotamer in the wrong place.
 
@@ -172,4 +188,6 @@ docs/method.md       what the intervention is and why it is where it is
 
 ## License
 
-MIT. See `LICENSE`.
+MIT, except `results/figures/rnp_familiarity.jpg`, which is someone else's figure
+reproduced under CC BY 4.0 and attributed in `results/figures/PROVENANCE.md`. See
+`LICENSE`.

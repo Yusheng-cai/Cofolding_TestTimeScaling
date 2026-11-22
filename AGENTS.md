@@ -125,6 +125,12 @@ committing data:
   recomputes nothing. A disagreement between it and a source report is an
   extraction bug, not a result. Each such table ships its extractor and a
   `PROVENANCE.md` naming the source and its checksum.
+- **Third-party:** `results/figures/rnp_familiarity.jpg` is Figure 1 of the Runs N'
+  Poses preprint, reproduced unmodified under CC BY 4.0. It is the only file here
+  that is not ours and the only one not covered by `LICENSE`; its attribution is in
+  `results/figures/PROVENANCE.md`. Do not crop, recolour or regenerate it, and do
+  not add another third-party figure without the same provenance entry and a
+  checked licence.
 - **Never committed:** run directories, checkpoints, model caches, unpacked MSAs,
   bulk datasets. `runs/` is ignored and is the only place runs may be written.
 
