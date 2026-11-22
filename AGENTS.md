@@ -12,7 +12,14 @@ two conflict, this file wins for anything under this directory.
 
 One mechanism, studied end to end: co-folding models commit to a ligand placement
 during diffusion, and that commitment can be erased by overwriting the ligand's rows
-of the trunk single representation. The first and so far only system is PDB 8SGE.
+of the trunk single representation.
+
+The *failure* is documented here across systems and models: 8 deposited complexes
+× 3 models in `data/cross_model/systems.csv`, 600 scored poses of 8SGE across the
+three models in `data/cross_model/pose_lddt.csv`, per-draw unperturbed sweeps on
+four systems in `data/baselines/`, and the deposited structures under `pdb/`. The
+*intervention* has per-pose arm tables here for Boltz-2 on 8SGE only. Keep that
+distinction intact in anything you write.
 
 It is **not** a benchmark harness, a model zoo, or an affinity predictor. Resist
 adding adapters, model registries or configuration layers until a second system
@@ -42,7 +49,12 @@ result is legible to anyone without a GPU.
 
 Library modules (`pose.py`, `score.py`, `axis.py`, `lddt.py`, `pdbio.py`) must stay
 importable in the inspect tier: numpy, and rdkit where a molecular graph is genuinely
-needed. Do not reintroduce scipy, biopython or safetensors; they were deliberately
+needed. `figstyle.py` imports matplotlib lazily for the same reason, and every figure
+goes through it — Computer Modern, boxed axes with inward ticks, bold parenthesised
+panel labels, large markers, explanation in the caption rather than inside the axes.
+Write labels in LaTeX markup and pass them through `figstyle.tex()`, which rewrites
+them when no `latex` binary is present; a figure that only renders with LaTeX
+installed breaks the inspect tier. Do not reintroduce scipy, biopython or safetensors; they were deliberately
 dropped when this code was extracted, and `score.py` selects the sole protein chain
 rather than running a sequence alignment to find it.
 
@@ -109,6 +121,10 @@ committing data:
   needs the same provenance file.
 - **Committed:** our own derived outputs — the aligned pose bundle in `data/poses/`
   and the per-pose table in `results/`. Small, textual or compressed.
+- **Consolidated:** `data/cross_model/` restates sweeps scored elsewhere and
+  recomputes nothing. A disagreement between it and a source report is an
+  extraction bug, not a result. Each such table ships its extractor and a
+  `PROVENANCE.md` naming the source and its checksum.
 - **Never committed:** run directories, checkpoints, model caches, unpacked MSAs,
   bulk datasets. `runs/` is ignored and is the only place runs may be written.
 
@@ -127,7 +143,7 @@ experiment's only trace.
 
 ## Tests and parity
 
-`python -m pytest -q` — 53 tests at the time of writing, no fixtures, no GPU.
+`python -m pytest -q` — 73 tests at the time of writing, no fixtures, no GPU.
 
 - `tests/test_interventions.py` is carried over unchanged from the work this
   repository was extracted from. It stubs the `boltz` module and includes the
@@ -152,8 +168,12 @@ experiment's only trace.
 
 ## Honesty
 
-The harm control is **not done**: whether destroying `s_lig` damages systems the
-model already places correctly is unanswered, and a bad answer would reframe this
-result. Say so wherever the result is stated. Likewise, nothing here demonstrates
-generalisation beyond one system — do not let a README or a docstring drift into
-implying otherwise.
+The harm control has an answer and it is a cost: on 8JJQ, where unperturbed Boltz-2
+seats 18 of 20 draws, destroying `s_lig` leaves 27 of 40. Those draws live in the
+work this repository was extracted from, not here, so cite them as pointers and say
+where they are. Never state the rescue rate without it.
+
+Nothing here demonstrates that the *intervention* generalises — the only per-pose
+arm tables committed are 8SGE's. Do not let a README or a docstring drift into
+implying otherwise, and do not blur it with the four-system baseline, which is
+evidence about the failure, not about the fix.

@@ -1,0 +1,17 @@
+pdb,familiarity,model,experiment_id,n_poses,hits_lt2,best_rmsd,median_rmsd
+7FTM,0.0,Boltz-2,exp041,25,0,30.373,31.183
+8CJG,0.0,AlphaFold3,exp095,25,24,1.322,1.643
+8CJG,0.0,Boltz-2,exp041,25,10,0.91,5.716
+8TQV,15.5,AlphaFold3,exp040,25,0,13.5,17.81
+8TQV,15.5,Boltz-2,exp041,25,0,13.828,14.549
+8SGE,32.0,AlphaFold3,exp096,100,19,1.025,7.152
+8SGE,32.0,Boltz-2,exp096,100,1,0.927,6.781
+8SGE,32.0,Protenix,exp096,100,64,0.931,1.787
+8AM2,34.7,AlphaFold3,exp095,25,1,1.321,7.695
+8AM2,34.7,Boltz-2,exp041,25,11,1.473,2.054
+8H7R,40.0,AlphaFold3,exp040,25,0,6.466,8.287
+8H7R,40.0,Boltz-2,exp077,30,0,7.818,8.236
+8JMP,41.9,AlphaFold3,exp040,25,0,4.385,5.438
+8JMP,41.9,Boltz-2,exp077,30,0,2.103,5.57
+8RDK,62.4,AlphaFold3,exp095,30,25,1.068,1.461
+8RDK,62.4,Boltz-2,exp077,30,24,0.768,1.144

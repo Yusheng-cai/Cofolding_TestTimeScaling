@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import csv
 import re
+import sys
 from math import comb
 from pathlib import Path
 
@@ -30,10 +31,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt                       # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from cofolding_tts import figstyle as fs              # noqa: E402
 
-INK, MUT, SURFACE = "#2a2a28", "#7a7a76", "#fcfcfb"
-# Okabe-Ito, assigned in a fixed order and never cycled.
-BLUE, ORANGE, GREEN, VERM, PURPLE = "#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7"
+MUT = fs.MUTED
+BLUE, ORANGE, GREEN, VERM, PURPLE = (fs.BLUE, fs.ORANGE, fs.GREEN, fs.VERM,
+                                     fs.PURPLE)
 
 SCAN = "control_scan"
 SCAN_MAX = 40
@@ -70,19 +73,6 @@ def load(path):
     return groups
 
 
-def style():
-    matplotlib.rcdefaults()
-    fs = 9
-    plt.rcParams.update({
-        "text.usetex": False, "font.family": "DejaVu Sans", "font.size": fs,
-        "axes.titlesize": fs + 0.5, "axes.labelsize": fs - 0.5,
-        "xtick.labelsize": fs - 1, "ytick.labelsize": fs - 1,
-        "axes.edgecolor": "#8a8a85", "axes.labelcolor": INK, "axes.linewidth": 0.8,
-        "xtick.color": "#6a6a66", "ytick.color": "#6a6a66",
-        "axes.spines.top": False, "axes.spines.right": False,
-        "figure.facecolor": SURFACE, "axes.facecolor": SURFACE,
-        "savefig.facecolor": SURFACE,
-    })
 
 
 def main() -> int:
@@ -94,55 +84,42 @@ def main() -> int:
     args = ap.parse_args()
 
     groups = load(args.per_pose)
-    style()
-    fig, axes = plt.subplots(1, 2, figsize=(10.0, 4.3), sharey=True)
-    fig.subplots_adjust(left=0.075, right=0.985, top=0.715, bottom=0.135, wspace=0.09)
+    fs.use(15.0)
+    fig, axes = plt.subplots(1, 2, figsize=(13.4, 5.6), sharey=True)
+    fig.subplots_adjust(left=0.065, right=0.992, top=0.885, bottom=0.135,
+                        wspace=0.065)
 
-    panels = [(axes[0], "placed_under_2A", "Reaching the crystal pose",
-               "ligand RMSD < 2 Å"),
-              (axes[1], "axis_correct", "Reaching the crystal's axial sense",
-               "C12–C11–N1–C3 on the crystal's side")]
+    panels = [(axes[0], "a", "placed_under_2A",
+               fs.tex(r"the crystal pose (RMSD $<$ 2\,\AA)")),
+              (axes[1], "b", "axis_correct",
+               fs.tex(r"the crystal's axial sense"))]
     xs = range(1, args.max_n + 1)
     summary = {}
-    for ax, column, title, sub in panels:
+    for ax, letter, column, title in panels:
         n_scan = len(groups[SCAN])
         k_scan = sum(int(r[column]) for r in groups[SCAN])
-        ax.plot(xs, reach(n_scan, k_scan, args.max_n), color=MUT, lw=1.6,
+        ax.plot(xs, reach(n_scan, k_scan, args.max_n), color=MUT, lw=2.4,
                 ls=(0, (4, 2.5)), zorder=2,
-                label=f"unperturbed scan  ({k_scan}/{n_scan})")
+                label=f"unperturbed  ({k_scan}/{n_scan})")
         for arm, label, colour, dash in ARMS:
             rows = groups[arm]
             if not rows:
                 continue
             n, k = len(rows), sum(int(r[column]) for r in rows)
-            ax.plot(xs, reach(n, k, args.max_n), color=colour, lw=2.0, ls=dash,
+            ax.plot(xs, reach(n, k, args.max_n), color=colour, lw=2.8, ls=dash,
                     zorder=3, label=f"{label}  ({k}/{n})")
             summary.setdefault(arm, {})[column] = (k, n)
-        ax.axhline(0.9, color=MUT, lw=0.9, ls=(0, (2, 2.5)), zorder=1)
-        ax.annotate("90%", (args.max_n, 0.9), textcoords="offset points",
-                    xytext=(-2, 5), ha="right", fontsize=7.2, color=MUT)
+        ax.axhline(0.9, color=MUT, lw=1.1, ls=(0, (2, 2.5)), zorder=1)
         ax.set_xlim(1, args.max_n)
         ax.set_ylim(-0.02, 1.02)
-        ax.set_xlabel("model runs, N")
-        ax.set_title(title, color=INK, loc="left", pad=20)
-        ax.annotate(sub, (0, 1), xycoords="axes fraction", textcoords="offset points",
-                    xytext=(0, 5), fontsize=7.4, color=MUT, va="bottom")
-        ax.grid(alpha=0.10, lw=0.5)
-        ax.legend(frameon=False, fontsize=7.4, labelcolor=INK, loc="lower right",
-                  handlelength=1.8, borderaxespad=0.6)
+        ax.set_xlabel("model runs, $N$")
+        fs.box(ax)
+        fs.panel(fig, ax, letter, dx=0.004 if letter == "b" else -0.052, dy=0.015,
+                 text=title)
+        ax.legend(frameon=False, loc="lower right", fontsize=13.0,
+                  handlelength=2.0, borderaxespad=0.7)
     axes[0].set_ylabel("chance at least one draw hits")
-
-    fig.suptitle("8SGE: with s_lig destroyed, the crystal pose becomes reachable "
-                 "at three conditionings of five",
-                 x=0.075, ha="left", y=0.965, fontsize=11, color=INK)
-    fig.text(0.075, 0.892,
-             "equal compute: N runs means N model seeds unperturbed, N noise draws "
-             "at one seed perturbed.  Oracle best-of-N —",
-             ha="left", fontsize=8.2, color=MUT)
-    fig.text(0.075, 0.855,
-             "the right answer becomes reachable, not identified; nothing here ranks "
-             "the draws.",
-             ha="left", fontsize=8.2, color=MUT)
+    axes[1].tick_params(labelleft=False)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

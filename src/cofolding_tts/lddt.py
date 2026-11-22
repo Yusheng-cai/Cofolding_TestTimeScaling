@@ -13,18 +13,28 @@ and cannot be flattered or punished by one.
 It is **contact-based**, which makes it blind to a particular kind of error. A
 ligand that sits in the right pocket the wrong way round keeps most of the same
 atoms near most of the same residues, so the preserved-distance fraction barely
-moves. On 8SGE the two basins overlap almost completely on this metric even though
-they are 5 A apart in RMSD. That is a property of the metric, not a bug here, and
-it is the reason the axial torsion is the primary label for 8SGE.
+moves. On 8SGE the two axial rotamers overlap almost completely on this metric --
+AlphaFold3's crystal-rotamer poses span 0.23 to 0.88 -- because having the right
+axial sense does not mean being in the right place. That is a property of the
+metric, not a bug here, and it is the reason the axial torsion is the primary
+label for 8SGE.
+
+Separating the rotamers is not the same question as separating *hits*, and on the
+latter the metric does well: a single cut separates RMSD < 2 A from the rest on 284
+of the 300 cross-model 8SGE poses (`youden_threshold`). That buys nothing as a
+predictor, because the pair set is chosen on the reference distances, so computing
+lDDT-PLI at all requires the deposited complex this score is meant to stand in for.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import NamedTuple
 
 import numpy as np
 
-__all__ = ["INCLUSION_RADIUS", "TOLERANCES", "lddt_from_distances", "lddt_pli"]
+__all__ = ["INCLUSION_RADIUS", "TOLERANCES", "Separation", "lddt_from_distances",
+           "lddt_pli", "youden_threshold"]
 
 INCLUSION_RADIUS = 15.0                      # A
 TOLERANCES: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0)   # A
@@ -74,3 +84,45 @@ def lddt_pli(
     included = reference_distances <= inclusion_radius
     return lddt_from_distances(
         reference_distances[included], predicted_distances[included], tolerances)
+
+
+class Separation(NamedTuple):
+    """How well one cut on a score separates labelled positives from negatives."""
+
+    cut: float
+    youden_j: float          # sensitivity + specificity - 1, in [0, 1]
+    accepted_negatives: int  # negatives at or above the cut
+    rejected_positives: int  # positives below it
+
+
+def youden_threshold(scores, labels) -> Separation:
+    """The cut on `scores` that best separates `labels`, by Youden's J.
+
+    A sample is accepted when ``score >= cut``; candidate cuts are the observed
+    scores, so the returned cut is always attained by a sample. Ties go to the
+    lowest cut, which is the most inclusive one.
+
+    This answers "how separable are these two sets, at best", not "what cut should
+    be used on new data" -- the cut is chosen on the same labels it is scored
+    against and is optimistic by construction. For lDDT-PLI in particular it is a
+    descriptive statistic and not a selection rule, since the metric needs the
+    reference complex.
+    """
+
+    scores = np.asarray(scores, dtype=float).ravel()
+    labels = np.asarray(labels, dtype=bool).ravel()
+    if scores.shape != labels.shape:
+        raise ValueError(f"{scores.size} scores vs {labels.size} labels")
+    n_pos, n_neg = int(labels.sum()), int((~labels).sum())
+    if not n_pos or not n_neg:
+        raise ValueError(f"need both classes, got {n_pos} positive and {n_neg} negative")
+
+    best = None
+    for cut in np.unique(scores):
+        accepted = scores >= cut
+        tp = int((accepted & labels).sum())
+        fp = int((accepted & ~labels).sum())
+        j = tp / n_pos - fp / n_neg
+        if best is None or j > best.youden_j:
+            best = Separation(float(cut), j, fp, n_pos - tp)
+    return best

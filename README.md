@@ -1,170 +1,149 @@
 # Cofolding_TestTimeScaling
 
-What co-folding models do at inference time, and what it takes to change their minds.
+Co-folding models do not place a ligand imprecisely. They choose between a small
+number of placements, commit early, and are often confident and wrong. This
+repository is about where that choice is made and what it takes to change it.
 
-## The compound
+## The failure is not one structure, and not one model
+
+![eight systems, three models](results/figures/cross_model.png)
+
+Every full-MSA sweep scored here: 8 deposited complexes, 3 models, 25–100
+unperturbed poses a cell, no oracle. Four of the eight are missed by every model run
+on them. Where models disagree they disagree sharply and not in anyone's consistent
+favour. Familiarity with the pre-cutoff training data does not order the outcome.
+
+Cells are not uniformly sampled and Protenix has only been run on 8SGE — read
+`data/cross_model/PROVENANCE.md` before quoting a rate.
+
+## There are two answers, not a spread
+
+![lDDT-PLI against ligand RMSD, three models](results/figures/landscape.png)
+
+300 poses on 8SGE, same molecule, same pocket and same MSA for all three models
+(each at its own default recycling, so this is three published models, not a
+controlled compute comparison). The RMSD marginal has two lobes with almost nothing between them: 0, 2 and 13 of 100 draws
+land in the 2.5–5 Å gap. **Colour is the axial torsion** C12–C11–N1–C3 — the two
+lobes are the two rotamers of one hindered bond, and the model picks one.
+
+Two things fall out of that panel and set up everything else here:
+
+- **The horizontal line is the best lDDT-PLI cut there is**: 0.76, fitted on these
+  300 poses against RMSD < 2 Å and agreeing with it on 284 of them. It is still not a
+  selection rule — lDDT-PLI draws its contact pairs from the deposited complex, so
+  computing it needs the answer it would stand in for — and it does not transfer:
+  wrong poses top out at 0.63 under Boltz-2, 0.73 under AlphaFold3 and 0.82 under
+  Protenix, which is why all 15 disagreements are in panel (c).
+- **The right axis is necessary, not sufficient.** AlphaFold3's green points at
+  6–9 Å are the crystal's rotamer in the wrong place.
 
 ![the 8SGE ligand](results/figures/8sge_compound.png)
 
-ZWS, as deposited with PDB **8SGE**. Everything here turns on the highlighted
-**C11–N1** bond. It joins two substituted rings, rotation about it is hindered, and
-the crystal sits at a C12–C11–N1–C3 torsion of **−101.4°**. The two senses of that
-torsion are not two points on a freely turning bond — they are separate conformers,
-and they put the two halves of the molecule on opposite sides of the pocket.
+## Sampling harder does not help; changing the conditioning does
 
-Boltz-2 picks the wrong one. Across 41 unperturbed runs — model seeds 1–40 and 42 —
-**not one pose lands within 2 Å of the crystal**, and only one has the crystal's
-axial sense, that one at 8.28 Å: right axis, wrong place.
-
-## Best-of-N
-
-Sampling harder does not help, because there is nothing to sample: the conditioning
-is an unperturbed run's only source of randomness, and a given seed returns the same
-pose every time.
+Under a fixed conditioning the diffusion is near-deterministic — a given Boltz-2 seed
+returns the same pose every time, and the unperturbed draws on 8SGE agree with each
+other to 0.11 Å while disagreeing with the crystal by 6.8 Å. Best-of-N over seeds
+re-rolls the conditioning, not the pose.
 
 Replacing the ligand's rows of the trunk single representation with matched Gaussian
-noise, once, at the trunk-to-diffusion boundary, **manufactures a distribution where
-there was none**.
+noise, once, at the trunk-to-diffusion boundary, manufactures a distribution where
+there was none.
 
 ![best-of-N reachability](results/figures/8sge_best_of_n.png)
 
-| model seed | unperturbed | within 2 Å | right axis | runs for a 90% chance |
-|---|---|---|---|---|
-| 12 | 6.77 Å, wrong | 24 / 40 | 24 / 40 | **3** |
-| 42 | 6.76 Å, wrong | 21 / 40 | 21 / 40 | **3** |
-| 14 | 6.78 Å, wrong | 1 / 40 | 37 / 40 | 36 |
-| 5 | 6.77 Å, wrong | 0 / 40 | 0 / 40 | — |
-| 59 | **0.93 Å, right** | 21 / 40 | 21 / 40 | 3 |
+| 8SGE, 20 draws an arm | in the crystal's basin |
+| --- | --- |
+| unperturbed control | 1 / 20 |
+| `s_lig` destroyed (ours) | 9 / 20 |
+| Boltz-Perturb TCP, C11 | **11 / 20** |
+| TCP with the direction frozen for the run | 7 / 20 |
+| TCP over the whole trajectory (C10) | 5 / 20 |
 
-Three things in that table are worth more than the headline:
+Same magnitude and schedule in the two C11 arms, so the **per-step redraw** is the
+whole of that difference.
 
-- **Seed 14 is why two metrics are plotted.** The axis flips in 37 of 40 draws and
-  the ligand still does not seat, piling up at 2.5–3.5 Å. The axial sense is
-  necessary and not sufficient, and a single metric would hide that.
-- **Seed 5 does not move at all.** Whatever the intervention erases elsewhere, it
-  does not erase here.
-- **Seed 59 is a cost, not a rescue.** It is the one conditioning the model already
-  placed correctly, and destroying `s_lig` takes it from right-every-time to right
-  in 21 of 40. The intervention randomises this conditioning rather than improving it.
-
-The five rows are **not replicates and must not be pooled.** The model seed picks
-the conditioning; the direction seed picks a draw from it. Seating rates run 0/40 to
-24/40 across conditionings, χ² = 63 on 4 d.f. — and seed 59 was added precisely
-*because* the model already succeeds there, so averaging it in would inflate the
-result with a conditioning chosen for being easy.
-
-`scripts/figure_8sge.py` draws the per-pose distributions those curves are computed
-from.
+This is *oracle* best-of-N. It says the right answer becomes reachable, not that it
+can be picked out — and on 8JJQ, where Boltz-2 is already right 18 times in 20, the
+same intervention leaves 27 of 40. It adds variance, not knowledge.
 
 ## Running it
 
-**Inspect** — no GPU, no model, no checkpoint. Reads committed data only.
+**Inspect** — no GPU, no model, no checkpoint; committed data only.
 
 ```bash
 pip install -e .
-python scripts/figure_compound.py   # -> results/figures/8sge_compound.png
-python scripts/figure_bestofn.py    # -> results/figures/8sge_best_of_n.png
-python scripts/figure_8sge.py       # -> results/figures/8sge_rescue.png
-python scripts/viewer_8sge.py       # -> results/figures/8sge_viewer.html
+python scripts/figure_cross_model.py   # -> results/figures/cross_model.png
+python scripts/figure_landscape.py     # -> results/figures/landscape.png
+python scripts/figure_compound.py
+python scripts/figure_bestofn.py
+python scripts/figure_8sge.py
+python scripts/viewer_8sge.py          # standalone 3D HTML, both basins
+python -m pytest -q
 ```
 
-**Reproduce** — needs a GPU. Boltz-2 is not vendored here, and neither is the
-checkpoint or the cache, so one script installs the first for you:
+Figures are drawn through `cofolding_tts.figstyle`: Computer Modern, boxed axes,
+inward ticks. It renders text with LaTeX when a `latex` binary is on PATH and falls
+back to matplotlib's own fonts when it is not, so a bare clone still produces every
+figure.
+
+**Reproduce** — needs a GPU. Boltz-2 is not vendored; one script installs it.
 
 ```bash
-bash scripts/setup_boltz.sh          # a separate venv with boltz==2.2.1
-```
-
-Boltz goes in its own environment because it pins a CUDA-specific torch build, and
-the inspect tier above is meant to keep working with no torch at all. If you would
-rather have one environment, `pip install -e ".[reproduce]"` does the same install.
-
-Every number here was produced with **boltz 2.2.1**. The intervention patches named
-attributes of named Boltz classes, so a release that moves one would install cleanly
-and silently do nothing; the runner refuses to start on any other version unless you
-pass `--allow-any-boltz`.
-
-```bash
+bash scripts/setup_boltz.sh            # a separate venv with boltz==2.2.1
 export BOLTZ_CHECKPOINT=/path/to/boltz2_conf.ckpt
 export BOLTZ_CACHE=/path/to/boltz/cache
 
 python scripts/run_8sge.py --arm control --draws 30 --python .venv-boltz/bin/python
 python scripts/run_8sge.py --arm gauss   --draws 40
+python scripts/run_8sge.py --arm tcp     --draws 20     # also tcp-frozen, tcp-c10
 python scripts/score_8sge.py --runs runs
 ```
 
-**The published comparison** — Boltz-Perturb's TCP, ported onto the stock sampler
-rather than run from their fork, so its numbers are comparable with the arms above.
-`tcp` is their configuration C11 (sigma_max 0.9, psi 0.7, steps 80-159 of 200);
-`tcp-c10` widens the window to the whole trajectory; `tcp-frozen` holds the
-direction fixed for the run, which is the control that isolates the per-step redraw.
-
-```bash
-python scripts/run_8sge.py --arm tcp        --draws 20
-python scripts/run_8sge.py --arm tcp-frozen --draws 20
-python scripts/run_8sge.py --arm tcp-c10    --draws 20
-```
-
-Measured on 8SGE, 20 draws an arm: control 1/20 in the correct basin, our `s_lig`
-gauss ablation 9/20, TCP C11 11/20 with 10 poses under 2 A, TCP frozen 7/20 with 3,
-TCP C10 5/20 with none. Same magnitude and schedule in the two C11 arms, so the
-per-step redraw is the whole of that difference.
-
-Runs are resumable and land under `runs/`, which is not tracked.
+Every number here was produced with **boltz 2.2.1**. The intervention patches named
+attributes of named Boltz classes, so a release that moved one would install cleanly
+and silently do nothing; the runner refuses any other version unless you pass
+`--allow-any-boltz`. Runs land under `runs/`, which is not tracked.
 
 ## Notebooks
 
-Four, each self-contained and runnable with no GPU: `numpy`, `matplotlib` and this
-package, reading only committed data.
+Four, self-contained, no GPU — `numpy`, `matplotlib` and this package over committed
+data.
 
 | notebook | what it shows |
 | --- | --- |
-| `notebooks/01_baseline.ipynb` | the failure on 8SGE, recomputed from coordinates and checked against the stored values |
-| `notebooks/02_baselines.ipynb` | the unperturbed rate on all four scored systems, with each one's familiarity beside it |
-| `notebooks/03_tcp_arms.ipynb` | Boltz-Perturb's TCP against ours, and the frozen control that isolates the redraw |
-| `notebooks/04_committor.ipynb` | the committor along the hindered axis: two basins, a tilted landscape, and what the ablation does to it |
+| `01_baseline.ipynb` | the failure on 8SGE, recomputed from coordinates |
+| `02_baselines.ipynb` | the unperturbed rate on four systems, with familiarity beside it |
+| `03_tcp_arms.ipynb` | Boltz-Perturb's TCP against ours, and the frozen control |
+| `04_committor.ipynb` | the committor along the hindered axis, and the tilt of the landscape |
 
 ## What is in here
 
 ```
-src/cofolding_tts/
-  intervene.py   the hook that replaces the trunk's ligand rows, and the CLI
-  tcp.py         Boltz-Perturb's TCP, applied to the conditioner's output
-  score.py       symmetry-corrected ligand RMSD after protein alignment
-  axis.py        atropisomer-axis perception, and the 8SGE axial label
-  lddt.py        lDDT-PLI
-  pose.py        Kabsch and mapped RMSD, numpy only
-  pdbio.py       column-correct PDB records
-  basin.py       which rotamer a pose landed in; the criterion everything scores by
-data/reference/  the 8SGE inputs a run needs: MSA, sequences, input template
-data/baselines/  unperturbed draws and familiarity for the four scored systems
-data/tcp/        the five 8SGE arms, one row per pose
-data/injection/  the step-140 injection ladder, both conditionings
-pdb/             deposited structures for the eight systems, with checksums
-results/         8sge_per_pose.csv — one row per draw — and figures
-docs/method.md   what the intervention is and why it is where it is
+src/cofolding_tts/   intervene.py (the hook + CLI), tcp.py, score.py, axis.py,
+                     lddt.py, pose.py, pdbio.py, basin.py, figstyle.py
+data/cross_model/    600 poses x 3 models on 8SGE; 16 (system, model) cells
+data/baselines/      unperturbed draws and familiarity, four systems
+data/tcp/            the five 8SGE arms, one row per pose
+data/injection/      the step-140 coordinate-injection ladder
+data/reference/      the 8SGE inputs a run needs
+pdb/                 deposited structures for eight systems, with checksums
+docs/method.md       what the intervention is and why it is where it is
 ```
 
 ## Limits
 
-- **One system.** Nothing here shows the intervention generalises.
-- **It adds variance, not knowledge.** Nothing selects the right pose. Turning
-  21 of 40 into a prediction needs a reference-free ranking signal, which is a
-  separate and unsolved problem. The curves above are *oracle* best-of-N.
-- **No harm control across systems.** Seed 59 is one within 8SGE and it already
-  shows a cost. Whether the same holds generally is unanswered.
-- **Ligand RMSD is measured after superposing the protein**, never by fitting the
-  ligand to itself, which would hide the placement error being studied.
-- **lDDT-PLI is reported but not used as the label.** On this system it separates
-  the two basins at 0.84 against 0.61 median, but the ranges overlap
-  (0.69–0.90 against 0.00–0.85), so no threshold labels a pose cleanly. The axial
-  torsion does, because it *is* the thing that differs.
-
-## Tests
-
-```bash
-python -m pytest -q
-```
+- **The failure is shown across systems and models; the rescue is characterised on
+  one system with one model.** Every per-pose arm table committed here is Boltz-2 on
+  8SGE.
+- **Nothing ranks the draws.** Turning 11 of 20 into a prediction needs a
+  reference-free selection signal, which is separate and unsolved.
+- **The intervention has a cost.** 8JJQ goes 18/20 → 27/40; on 8CJG it goes the
+  other way (7/20 → 40/40 and 39/40 under two conditionings); on 8AM2 it moves ~20%
+  of draws in *both* directions. Those draws are not vendored here — pointers, not
+  results you can check from this clone.
+- **Ligand RMSD is always measured against the deposited ligand** after superposing
+  the protein, never by fitting the ligand to itself.
 
 ## License
 
