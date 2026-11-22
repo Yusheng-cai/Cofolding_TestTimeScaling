@@ -1,8 +1,18 @@
 # Cofolding_TestTimeScaling
 
-Co-folding models do not place a ligand imprecisely. They choose between a small
-number of placements, commit early, and are often confident and wrong. This
-repository is about where that choice is made and what it takes to change it.
+[Runs N' Poses](https://doi.org/10.1038/s41594-026-01797-5) showed that co-folding
+accuracy scales with **familiarity** — how close a complex sits to something the
+model was trained on. Read as a coverage problem, that points at more data and more
+post-training.
+
+This repository tests the other reading: that for at least some of these misses the
+right pose is already inside the model's reach and the sampler never visits it. If
+that holds, the miss is a **search** failure at inference, and the lever is
+test-time compute rather than another training run.
+
+It is a falsifiable claim, not a hopeful one, and what follows is the attempt to
+break it — the shape of the failure, the fact that the obvious form of test-time
+scaling does not work, and the one change that does make the right answer reachable.
 
 ## The failure is not one structure, and not one model
 
@@ -11,7 +21,13 @@ repository is about where that choice is made and what it takes to change it.
 Every full-MSA sweep scored here: 8 deposited complexes, 3 models, 25–100
 unperturbed poses a cell, no oracle. Four of the eight are missed by every model run
 on them. Where models disagree they disagree sharply and not in anyone's consistent
-favour. Familiarity with the pre-cutoff training data does not order the outcome.
+favour.
+
+Familiarity is on the right axis, and inside this set it does not order the outcome.
+That is not a count against the Runs N' Poses trend: these eight were selected for
+being hard, so the honest reading is that a population-level trend gives you no grip
+on an individual complex — which is the case in which you would want to spend
+inference compute.
 
 Cells are not uniformly sampled and Protenix has only been run on 8SGE — read
 `data/cross_model/PROVENANCE.md` before quoting a rate.
@@ -19,6 +35,9 @@ Cells are not uniformly sampled and Protenix has only been run on 8SGE — read
 ## There are two answers, not a spread
 
 ![lDDT-PLI against ligand RMSD, three models](results/figures/landscape.png)
+
+Co-folding models do not place a ligand imprecisely. They choose between a small
+number of placements, commit early, and are often confident and wrong.
 
 300 poses on 8SGE, same molecule, same pocket and same MSA for all three models
 (each at its own default recycling, so this is three published models, not a
@@ -41,10 +60,12 @@ Two things fall out of that panel and set up everything else here:
 
 ## Sampling harder does not help; changing the conditioning does
 
-Under a fixed conditioning the diffusion is near-deterministic — a given Boltz-2 seed
-returns the same pose every time, and the unperturbed draws on 8SGE agree with each
-other to 0.11 Å while disagreeing with the crystal by 6.8 Å. Best-of-N over seeds
-re-rolls the conditioning, not the pose.
+This is where the test-time scaling question gets answered, and the first answer is
+no. Under a fixed conditioning the diffusion is near-deterministic — a given Boltz-2
+seed returns the same pose every time, and the unperturbed draws on 8SGE agree with
+each other to 0.11 Å while disagreeing with the crystal by 6.8 Å. Drawing more
+samples buys almost no coverage; best-of-N over seeds re-rolls the conditioning, not
+the pose.
 
 Replacing the ligand's rows of the trunk single representation with matched Gaussian
 noise, once, at the trunk-to-diffusion boundary, manufactures a distribution where
@@ -66,6 +87,10 @@ whole of that difference.
 This is *oracle* best-of-N. It says the right answer becomes reachable, not that it
 can be picked out — and on 8JJQ, where Boltz-2 is already right 18 times in 20, the
 same intervention leaves 27 of 40. It adds variance, not knowledge.
+
+Read back against the opening: on 8SGE the right pose was in reach the whole time,
+so that miss was a sampling failure rather than a coverage one. Whether the same is
+true of the other seven is open, and this repository does not settle it.
 
 ## Running it
 
