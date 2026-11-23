@@ -30,12 +30,21 @@ scaling does not work, and the one change that does make the right answer reacha
 
 ## The failure is not one structure, and not one model
 
-![eight systems, three models](results/figures/cross_model.png)
+![every scored draw, eight systems, three models](results/figures/cross_model.png)
 
-Every full-MSA sweep scored here: 8 deposited complexes, 3 models, 25–100
-unperturbed poses a cell, no oracle. Four of the eight are missed by every model run
-on them. Where models disagree they disagree sharply and not in anyone's consistent
-favour.
+Every unperturbed draw this project has scored: 645 poses, 8 deposited complexes, 3
+models, no oracle. A hit rate would hide the thing worth seeing, which is the shape
+of each strip.
+
+- **A tight clump far from the crystal is not uncertainty.** 7FTM's 25 Boltz-2 draws
+  span 0.99 Å about a median of 31 Å; 8H7R's 30 span 0.56 Å about 8.2 Å. Drawing
+  again returns the same wrong answer, which is why more samples do not help.
+- **Two clumps with a gap is a choice between two answers** — 8CJG and 8AM2 under
+  Boltz-2, 8SGE under AlphaFold3, 8RDK under both. What a hit rate reports is just
+  the fraction that landed in the near clump.
+- Four of the eight are missed by every model run on them, and where models disagree
+  they disagree sharply and not in anyone's consistent favour. An empty slot is a
+  model that was never run on that system, not one that scored badly.
 
 Familiarity is on the right axis, and inside this set it does not order the outcome.
 That is not a count against the Runs N' Poses trend: these eight were selected for
@@ -163,7 +172,7 @@ data.
 ```
 src/cofolding_tts/   intervene.py (the hook + CLI), tcp.py, score.py, axis.py,
                      lddt.py, pose.py, pdbio.py, basin.py, figstyle.py
-data/cross_model/    600 poses x 3 models on 8SGE; 16 (system, model) cells
+data/cross_model/    645 draws over 8 systems; 600 scored poses on 8SGE
 data/baselines/      unperturbed draws and familiarity, four systems
 data/tcp/            the five 8SGE arms, one row per pose
 data/injection/      the step-140 coordinate-injection ladder

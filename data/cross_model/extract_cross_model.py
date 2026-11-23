@@ -8,6 +8,10 @@ from raw predictions here.
                   (exp096), carrying ligand RMSD, lDDT-PLI and the axial torsion.
   systems.csv     one row per (system, model) cell this project has scored
                   (reports/cross_model_cofolding), carrying the < 2 A hit count.
+  system_poses.csv  one row per DRAW behind those cells, carrying its ligand RMSD.
+                  Followed from each cell's own source_csv pointer, so the counts
+                  recomputed from it must reproduce systems.csv exactly; the
+                  extractor asserts that and refuses to write if they disagree.
 
 This script CANNOT run on a fresh clone -- its sources are not vendored. It is
 committed so the vendored tables have a recipe rather than only a description.
@@ -32,6 +36,61 @@ POSE_COLS = ["model", "msa", "seed", "sample", "ligand_rmsd_angstrom",
              "lddt_pli", "axial_torsion_deg", "crystal_side_of_axis"]
 SYS_COLS = ["pdb", "familiarity", "model", "experiment_id", "n_poses",
             "hits_lt2", "best_rmsd", "median_rmsd"]
+DRAW_COLS = ["pdb", "familiarity", "model", "experiment_id", "pose",
+             "ligand_rmsd_angstrom"]
+
+# The per-pose files were written by six different experiments and name the system
+# and the model in whatever way suited each. These three readers are the whole of
+# the difference; everything else about a draw is read the same way.
+MODEL_NAMES = {"alphafold3": "AlphaFold3", "boltz2": "Boltz-2",
+               "protenix": "Protenix", "boltz-2": "Boltz-2"}
+
+
+def system_of(row: dict) -> str | None:
+    """The PDB id a row belongs to, or None in a single-system file."""
+
+    if row.get("pdb_id"):
+        return row["pdb_id"].upper()
+    for key in ("target", "sample_id"):
+        if row.get(key):
+            return row[key][:4].upper()
+    return None
+
+
+def model_of(row: dict) -> str | None:
+    """The model a row came from, or None in a single-model file."""
+
+    name = row.get("sampling_model") or row.get("model")
+    return MODEL_NAMES.get((name or "").lower(), name) if name else None
+
+
+def pose_of(row: dict, index: int) -> str:
+    """A stable identifier for the draw: its seed, or its prediction path."""
+
+    if row.get("seed"):
+        return row["seed"]
+    ref = row.get("file") or row.get("prediction_file") or ""
+    m = re.search(r"seed[_-](\d+)", ref)
+    return m.group(1) if m else str(index)
+
+
+def draws_for_cell(cell: dict, source: Path) -> list[dict]:
+    """Every draw behind one (system, model) cell, read from its own source file."""
+
+    rows = list(csv.DictReader(open(source / cell["source_csv"])))
+    out = []
+    for i, r in enumerate(rows):
+        sys_id, model = system_of(r), model_of(r)
+        if sys_id is not None and sys_id != cell["pdb"]:
+            continue
+        if model is not None and model != cell["model"]:
+            continue
+        out.append({"pdb": cell["pdb"], "familiarity": cell["familiarity"],
+                    "model": cell["model"],
+                    "experiment_id": cell["experiment_id"],
+                    "pose": pose_of(r, i),
+                    "ligand_rmsd_angstrom": f"{float(r['ligand_rmsd_angstrom']):.3f}"})
+    return out
 
 
 def sha256(path: Path) -> str:
@@ -89,7 +148,8 @@ def main() -> int:
         cells.append({"pdb": r["pdb_id"], "familiarity": r["familiarity"],
                       "model": r["model"], "experiment_id": r["experiment_id"],
                       "n_poses": r["n_poses"], "hits_lt2": r["hits_lt2"],
-                      "best_rmsd": r["best_rmsd"], "median_rmsd": r["median_rmsd"]})
+                      "best_rmsd": r["best_rmsd"], "median_rmsd": r["median_rmsd"],
+                      "source_csv": r["source_csv"]})
     # One cell per (system, model), the largest full-MSA sweep.
     best: dict[tuple[str, str], dict] = {}
     for c in cells:
@@ -99,12 +159,32 @@ def main() -> int:
     cells = sorted(best.values(), key=lambda c: (float(c["familiarity"]), c["pdb"],
                                                  c["model"]))
     with open(HERE / "systems.csv", "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=SYS_COLS)
+        w = csv.DictWriter(fh, fieldnames=SYS_COLS, extrasaction="ignore")
         w.writeheader()
         w.writerows(cells)
     n_sys = len({c["pdb"] for c in cells})
     print(f"systems.csv     {len(cells)} cells, {n_sys} systems   "
           f"source sha256 {sha256(systems_in)[:16]}")
+
+    draws, disagreements = [], []
+    for c in cells:
+        got = draws_for_cell(c, args.source)
+        hits = sum(1 for d in got if float(d["ligand_rmsd_angstrom"]) < 2.0)
+        if (len(got), hits) != (int(c["n_poses"]), int(c["hits_lt2"])):
+            disagreements.append(
+                f"{c['pdb']}/{c['model']} ({c['experiment_id']}): "
+                f"read {len(got)} draws with {hits} hits, "
+                f"summary says {c['n_poses']} with {c['hits_lt2']}")
+        draws.extend(got)
+    if disagreements:
+        raise SystemExit("per-pose files do not reproduce the summary table:\n  "
+                         + "\n  ".join(disagreements))
+    with open(HERE / "system_poses.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=DRAW_COLS)
+        w.writeheader()
+        w.writerows(draws)
+    print(f"system_poses.csv {len(draws)} draws over {len(cells)} cells   "
+          f"counts match systems.csv exactly")
     return 0
 
 

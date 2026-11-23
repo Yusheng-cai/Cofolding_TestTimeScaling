@@ -2,7 +2,7 @@
 
 Consolidations of sweeps that already existed. Nothing here is recomputed from raw
 predictions; a disagreement with a source report is a bug in the extraction, not a
-new result. `extract_cross_model.py` rebuilds both files and prints the source
+new result. `extract_cross_model.py` rebuilds all three files and prints the source
 checksums.
 
 ## `pose_lddt.csv` — 600 poses, 8SGE, three models
@@ -54,5 +54,32 @@ other seven systems.
 Source: `reports/cross_model_cofolding/cross_model_pose_results.csv`,
 sha256 `15c357215c486c6e…`, itself built from the per-pose CSVs of exp040, exp041,
 exp077, exp079, exp095 and exp096.
+
+It is the index for `system_poses.csv` below, and the two must agree.
+
+## `system_poses.csv` — 645 draws, the same 16 cells
+
+One row per **draw** behind those cells: the distribution each cell's summary line
+was computed from. A rate hides the shape, and the shape is what distinguishes a
+model that is uncertain from one that is confidently wrong.
+
+| column | meaning |
+| --- | --- |
+| `pdb`, `familiarity`, `model`, `experiment_id` | the cell this draw belongs to |
+| `pose` | the draw's seed, or its index where the source recorded no seed |
+| `ligand_rmsd_angstrom` | symmetry-corrected ligand RMSD **to the deposited ligand**, after protein alignment |
+
+Sources: followed from each cell's own `source_csv` pointer — the per-pose CSVs of
+exp040, exp041, exp077, exp095 and exp096. Those files were written by five
+different experiments and name the system and the model differently; the extractor's
+`system_of` / `model_of` / `pose_of` readers are the whole of that difference.
+
+**The extractor checks itself.** For every cell it recomputes `n_poses` and
+`hits_lt2` from the draws it read and refuses to write the file if either disagrees
+with `systems.csv`. The committed table passes that check on all 16 cells, which is
+what makes it safe to treat these two files as one table.
+
+There is no lDDT-PLI column here. That metric was only ever computed for 8SGE, where
+it is in `pose_lddt.csv`; the other seven systems have ligand RMSD alone.
 
 `scripts/figure_cross_model.py` draws it.
