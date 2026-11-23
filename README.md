@@ -42,9 +42,25 @@ of each strip.
 - **Two clumps with a gap is a choice between two answers** — 8CJG and 8AM2 under
   Boltz-2, 8SGE under AlphaFold3, 8RDK under both. What a hit rate reports is just
   the fraction that landed in the near clump.
-- Four of the eight are missed by every model run on them, and where models disagree
-  they disagree sharply and not in anyone's consistent favour. An empty slot is a
-  model that was never run on that system, not one that scored badly.
+- **One clump inside the green band is a solved system** — 8RDK under both models,
+  8CJG under AlphaFold3. Protenix on 8SGE is the in-between case: most of its draws
+  are inside the band and a tail of them is not. Where models disagree they disagree
+  sharply and not in anyone's consistent favour. An empty slot is a model that was
+  never run on that system, not one that scored badly.
+
+**In five of the sixteen cells the right answer is already in the model's own
+output — it is just rare.** Boltz-2 puts 10 of 25 8CJG draws under 2 Å while its
+median sits at 5.7 Å; on 8SGE it reaches 0.93 Å once in 100. AlphaFold3 reaches
+1.02 Å on 8SGE 19 times in 100, and 1.32 Å on 8AM2 once in 25. Nothing is missing
+from the model in those cells. The crystal pose is in its distribution, the draws
+around it are not, and which one you get is the whole of the difference — that is
+the sampling failure this repository is about, and it is why spending compute at
+inference is a sensible move there rather than a hope.
+
+**In the other four systems no draw ever came within 2 Å.** The closest was 2.10 Å,
+Boltz-2 on 8JMP; the rest never got nearer than 4.4 Å, and 7FTM never left 30 Å.
+For those, nothing here shows the answer is reachable at all, and drawing more
+samples is not what would find out.
 
 Familiarity is on the right axis, and inside this set it does not order the outcome.
 That is not a count against the Runs N' Poses trend: these eight were selected for

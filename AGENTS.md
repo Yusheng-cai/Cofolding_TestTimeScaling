@@ -179,6 +179,13 @@ seats 18 of 20 draws, destroying `s_lig` leaves 27 of 40. Those draws live in th
 work this repository was extracted from, not here, so cite them as pointers and say
 where they are. Never state the rescue rate without it.
 
+Keep the two halves of `data/cross_model/` apart when writing about them. In five
+of the sixteen cells a draw reached the crystal pose and most draws did not, which
+is the evidence that the miss is a sampling failure. In seven cells, covering 7FTM,
+8TQV, 8H7R and 8JMP, no draw ever came within 2 A; the nearest was 2.10 A. Those
+cells say nothing about reachability in either direction, so do not count them
+toward the sampling claim and do not let a summary imply they were rescued.
+
 Nothing here demonstrates that the *intervention* generalises — the only per-pose
 arm tables committed are 8SGE's. Do not let a README or a docstring drift into
 implying otherwise, and do not blur it with the four-system baseline, which is
