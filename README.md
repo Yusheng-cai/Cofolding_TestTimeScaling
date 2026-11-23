@@ -30,17 +30,31 @@ the one system where it has been taken apart far enough to name the coordinate t
 decides it. What to *do* about it is a separate question, and not this README's;
 `docs/method.md` and the notebooks carry where that has got to.
 
-## The failure is not one structure, and not one model
+## Sometimes the right answer is already in the output
 
 ![every scored draw, eight systems, three models](results/figures/cross_model.png)
 
 Every unperturbed draw this project has scored: 645 poses, 8 deposited complexes, 3
-models, no oracle. A hit rate would hide the thing worth seeing, which is the shape
-of each strip.
+models, no oracle. **In five of the sixteen cells the crystal pose is already in the
+model's own output — it is just rare.** Boltz-2 puts 10 of 25 8CJG draws under 2 Å
+while its median sits at 5.7 Å; on 8SGE it reaches 0.93 Å once in 100. AlphaFold3
+reaches 1.02 Å on 8SGE 19 times in 100, and 1.32 Å on 8AM2 once in 25.
+
+Nothing is missing from the model in those cells. The right answer is in its
+distribution, almost all of the draws around it are not, and which one you get is
+the whole of the difference. That is a search problem, and it is the one case where
+spending compute at inference is a sensible move rather than a hope.
+
+**In the other four systems no draw ever came within 2 Å.** The closest was 2.10 Å,
+Boltz-2 on 8JMP; the rest never got nearer than 4.4 Å, and 7FTM never left 30 Å.
+Nothing here says the answer is reachable in those, in either direction.
+
+A hit rate would hide all of that, which is why every draw is drawn. Three shapes
+carry it:
 
 - **A tight clump far from the crystal is not uncertainty.** 7FTM's 25 Boltz-2 draws
   span 0.99 Å about a median of 31 Å; 8H7R's 30 span 0.56 Å about 8.2 Å. Drawing
-  again returns the same wrong answer, which is why more samples do not help.
+  again returns the same wrong answer.
 - **Two clumps with a gap is a choice between two answers** — 8CJG and 8AM2 under
   Boltz-2, 8SGE under AlphaFold3, 8RDK under both. What a hit rate reports is just
   the fraction that landed in the near clump.
@@ -50,25 +64,16 @@ of each strip.
   sharply and not in anyone's consistent favour. An empty slot is a model that was
   never run on that system, not one that scored badly.
 
-**In five of the sixteen cells the right answer is already in the model's own
-output — it is just rare.** Boltz-2 puts 10 of 25 8CJG draws under 2 Å while its
-median sits at 5.7 Å; on 8SGE it reaches 0.93 Å once in 100. AlphaFold3 reaches
-1.02 Å on 8SGE 19 times in 100, and 1.32 Å on 8AM2 once in 25. Nothing is missing
-from the model in those cells. The crystal pose is in its distribution, the draws
-around it are not, and which one you get is the whole of the difference — that is
-the sampling failure this repository is about, and it is why spending compute at
-inference is a sensible move there rather than a hope.
-
-**In the other four systems no draw ever came within 2 Å.** The closest was 2.10 Å,
-Boltz-2 on 8JMP; the rest never got nearer than 4.4 Å, and 7FTM never left 30 Å.
-For those, nothing here shows the answer is reachable at all, and drawing more
-samples is not what would find out.
-
 Familiarity is on the right axis, and inside this set it does not order the outcome.
 That is not a count against the Runs N' Poses trend: these eight were selected for
 being hard, so the honest reading is that a population-level trend gives you no grip
 on an individual complex — which is the case in which you would want to spend
 inference compute.
+
+What varies between the draws in a cell is the seed, not the diffusion noise: within
+one conditioning the diffusion is near-deterministic, and the unperturbed 8SGE draws
+agree with *each other* to 0.11 Å while disagreeing with the crystal by 6.8 Å. The
+spread in each strip is the conditioning being re-rolled.
 
 Cells are not uniformly sampled, a hit here is RMSD < 2 Å alone rather than the
 benchmark's stricter combined criterion, and Protenix has only been run on 8SGE —
@@ -98,23 +103,6 @@ Two things fall out of that panel and set up everything else here:
   pairs from the deposited complex and so needs the answer it would stand in for.
 - **The right axis is necessary, not sufficient.** AlphaFold3's green points at
   6–9 Å are the crystal's rotamer in the wrong place.
-
-## You cannot sample your way out of it
-
-Within one conditioning the diffusion is near-deterministic. A given Boltz-2 seed
-returns the same pose every time, and the unperturbed 8SGE draws agree with *each
-other* to 0.11 Å while disagreeing with the crystal by 6.8 Å. Best-of-N over seeds
-re-rolls the conditioning, not the pose.
-
-So the rare correct draws two figures up are rare in a particular way. They are not
-a sampler exploring and occasionally finding the answer; they are a handful of
-conditionings that happened to land on the other side, drawn from a model that will
-then reproduce that answer exactly as faithfully as it reproduces the wrong one.
-That is what makes this a search problem rather than a precision problem, and it is
-where the repository's remaining work starts — `docs/method.md` for the intervention
-that follows from it, `03_tcp_arms.ipynb` and `04_committor.ipynb` for its arms and
-the landscape they move on, `data/tcp/` for the per-pose tables. Read **Limits**
-before quoting any of that.
 
 ## Running it
 
@@ -181,6 +169,10 @@ data/reference/      the 8SGE inputs a run needs
 pdb/                 deposited structures for eight systems, with checksums
 docs/method.md       what the intervention is and why it is where it is
 ```
+
+What this README does not cover is what to do about the problem. The intervention,
+its arms and the landscape they move on are in `docs/method.md`, `data/tcp/` and
+notebooks `03`–`04`; read **Limits** before quoting any of it.
 
 ## Limits
 
