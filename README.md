@@ -24,9 +24,11 @@ right pose is already inside the model's reach and the sampler never visits it. 
 that holds, the miss is a **search** failure at inference, and the lever is
 test-time compute rather than another training run.
 
-It is a falsifiable claim, not a hopeful one, and what follows is the attempt to
-break it — the shape of the failure, the fact that the obvious form of test-time
-scaling does not work, and the one change that does make the right answer reachable.
+It is a falsifiable claim, not a hopeful one, and what follows is the evidence for
+its premise: the shape of the failure across eight complexes and three models, and
+the one system where it has been taken apart far enough to name the coordinate that
+decides it. What to *do* about it is a separate question, and not this README's;
+`docs/method.md` and the notebooks carry where that has got to.
 
 ## The failure is not one structure, and not one model
 
@@ -97,41 +99,22 @@ Two things fall out of that panel and set up everything else here:
 - **The right axis is necessary, not sufficient.** AlphaFold3's green points at
   6–9 Å are the crystal's rotamer in the wrong place.
 
-![the 8SGE ligand](results/figures/8sge_compound.png)
+## You cannot sample your way out of it
 
-## Sampling harder does not help; changing the conditioning does
+Within one conditioning the diffusion is near-deterministic. A given Boltz-2 seed
+returns the same pose every time, and the unperturbed 8SGE draws agree with *each
+other* to 0.11 Å while disagreeing with the crystal by 6.8 Å. Best-of-N over seeds
+re-rolls the conditioning, not the pose.
 
-This is where the test-time scaling question gets answered, and the first answer is
-no. Under a fixed conditioning the diffusion is near-deterministic — a given Boltz-2
-seed returns the same pose every time, and the unperturbed draws on 8SGE agree with
-each other to 0.11 Å while disagreeing with the crystal by 6.8 Å. Drawing more
-samples buys almost no coverage; best-of-N over seeds re-rolls the conditioning, not
-the pose.
-
-Replacing the ligand's rows of the trunk single representation with matched Gaussian
-noise, once, at the trunk-to-diffusion boundary, manufactures a distribution where
-there was none.
-
-![best-of-N reachability](results/figures/8sge_best_of_n.png)
-
-| 8SGE, 20 draws an arm | in the crystal's basin |
-| --- | --- |
-| unperturbed control | 1 / 20 |
-| `s_lig` destroyed (ours) | 9 / 20 |
-| Boltz-Perturb TCP, C11 | **11 / 20** |
-| TCP with the direction frozen for the run | 7 / 20 |
-| TCP over the whole trajectory (C10) | 5 / 20 |
-
-Same magnitude and schedule in the two C11 arms, so the **per-step redraw** is the
-whole of that difference.
-
-This is *oracle* best-of-N. It says the right answer becomes reachable, not that it
-can be picked out — and on 8JJQ, where Boltz-2 is already right 18 times in 20, the
-same intervention leaves 27 of 40. It adds variance, not knowledge.
-
-Read back against the opening: on 8SGE the right pose was in reach the whole time,
-so that miss was a sampling failure rather than a coverage one. Whether the same is
-true of the other seven is open, and this repository does not settle it.
+So the rare correct draws two figures up are rare in a particular way. They are not
+a sampler exploring and occasionally finding the answer; they are a handful of
+conditionings that happened to land on the other side, drawn from a model that will
+then reproduce that answer exactly as faithfully as it reproduces the wrong one.
+That is what makes this a search problem rather than a precision problem, and it is
+where the repository's remaining work starts — `docs/method.md` for the intervention
+that follows from it, `03_tcp_arms.ipynb` and `04_committor.ipynb` for its arms and
+the landscape they move on, `data/tcp/` for the per-pose tables. Read **Limits**
+before quoting any of that.
 
 ## Running it
 
@@ -139,12 +122,14 @@ true of the other seven is open, and this repository does not settle it.
 
 ```bash
 pip install -e .
-python scripts/figure_cross_model.py   # -> results/figures/cross_model.png
-python scripts/figure_landscape.py     # -> results/figures/landscape.png
-python scripts/figure_compound.py
-python scripts/figure_bestofn.py
-python scripts/figure_8sge.py
-python scripts/viewer_8sge.py          # standalone 3D HTML, both basins
+python scripts/figure_cross_model.py   # the two figures above
+python scripts/figure_landscape.py
+
+python scripts/figure_compound.py      # not shown here: the ligand, the
+python scripts/figure_bestofn.py       # intervention arms, the 8SGE rescue,
+python scripts/figure_8sge.py          # and a standalone 3D viewer of both
+python scripts/viewer_8sge.py          # basins in the pocket
+
 python -m pytest -q
 ```
 
@@ -199,11 +184,14 @@ docs/method.md       what the intervention is and why it is where it is
 
 ## Limits
 
-- **The failure is shown across systems and models; the rescue is characterised on
-  one system with one model.** Every per-pose arm table committed here is Boltz-2 on
-  8SGE.
-- **Nothing ranks the draws.** Turning 11 of 20 into a prediction needs a
-  reference-free selection signal, which is separate and unsolved.
+- **The sampling claim holds in five of sixteen cells, not everywhere.** In seven
+  cells no draw ever reached the crystal pose, and those say nothing about whether
+  it is reachable at all.
+- **The failure is shown across systems and models; the intervention is
+  characterised on one system with one model.** Every per-pose arm table committed
+  here is Boltz-2 on 8SGE.
+- **Nothing ranks the draws.** A rare correct draw is worth nothing without a
+  reference-free way to pick it out, which is separate and unsolved.
 - **The intervention has a cost.** 8JJQ goes 18/20 → 27/40; on 8CJG it goes the
   other way (7/20 → 40/40 and 39/40 under two conditionings); on 8AM2 it moves ~20%
   of draws in *both* directions. Those draws are not vendored here — pointers, not
