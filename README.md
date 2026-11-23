@@ -34,50 +34,25 @@ decides it. What to *do* about it is a separate question, and not this README's;
 
 ![every scored draw, eight systems, three models](results/figures/cross_model.png)
 
-Every unperturbed draw this project has scored: 645 poses, 8 deposited complexes, 3
-models, no oracle. **In five of the sixteen cells the crystal pose is already in the
-model's own output — it is just rare.** Boltz-2 puts 10 of 25 8CJG draws under 2 Å
-while its median sits at 5.7 Å; on 8SGE it reaches 0.93 Å once in 100. AlphaFold3
-reaches 1.02 Å on 8SGE 19 times in 100, and 1.32 Å on 8AM2 once in 25.
+645 unperturbed draws, 8 deposited complexes, 3 models, no oracle — every one of
+them drawn, because the shape of a strip says what a hit rate cannot.
 
-Nothing is missing from the model in those cells. The right answer is in its
-distribution, almost all of the draws around it are not, and which one you get is
-the whole of the difference. That is a search problem, and it is the one case where
-spending compute at inference is a sensible move rather than a hope.
+- **In 5 of the 16 cells the crystal pose is already there, and rare.** 10 of 25 on
+  8CJG under Boltz-2 against a 5.7 Å median; 19 of 100 and 1 of 100 on 8SGE. Nothing
+  is missing from those models. Which draw you get is the whole of the difference,
+  and that is a search problem.
+- **In 7 cells no draw ever came within 2 Å** — closest 2.10 Å, Boltz-2 on 8JMP.
+  Nothing here says the answer is reachable in those, in either direction.
+- **A tight clump far from the crystal is not uncertainty.** 7FTM's 25 draws span
+  0.99 Å about a median of 31 Å. Drawing again returns the same wrong answer.
+- **Familiarity, on the right axis, does not order the outcome here.** These eight
+  were picked for being hard, so read that as a population trend giving no grip on
+  an individual complex, not as a count against it.
 
-**In the other four systems no draw ever came within 2 Å.** The closest was 2.10 Å,
-Boltz-2 on 8JMP; the rest never got nearer than 4.4 Å, and 7FTM never left 30 Å.
-Nothing here says the answer is reachable in those, in either direction.
-
-A hit rate would hide all of that, which is why every draw is drawn. Three shapes
-carry it:
-
-- **A tight clump far from the crystal is not uncertainty.** 7FTM's 25 Boltz-2 draws
-  span 0.99 Å about a median of 31 Å; 8H7R's 30 span 0.56 Å about 8.2 Å. Drawing
-  again returns the same wrong answer.
-- **Two clumps with a gap is a choice between two answers** — 8CJG and 8AM2 under
-  Boltz-2, 8SGE under AlphaFold3, 8RDK under both. What a hit rate reports is just
-  the fraction that landed in the near clump.
-- **One clump inside the green band is a solved system** — 8RDK under both models,
-  8CJG under AlphaFold3. Protenix on 8SGE is the in-between case: most of its draws
-  are inside the band and a tail of them is not. Where models disagree they disagree
-  sharply and not in anyone's consistent favour. An empty slot is a model that was
-  never run on that system, not one that scored badly.
-
-Familiarity is on the right axis, and inside this set it does not order the outcome.
-That is not a count against the Runs N' Poses trend: these eight were selected for
-being hard, so the honest reading is that a population-level trend gives you no grip
-on an individual complex — which is the case in which you would want to spend
-inference compute.
-
-What varies between the draws in a cell is the seed, not the diffusion noise: within
-one conditioning the diffusion is near-deterministic, and the unperturbed 8SGE draws
-agree with *each other* to 0.11 Å while disagreeing with the crystal by 6.8 Å. The
-spread in each strip is the conditioning being re-rolled.
-
-Cells are not uniformly sampled, a hit here is RMSD < 2 Å alone rather than the
-benchmark's stricter combined criterion, and Protenix has only been run on 8SGE —
-read `data/cross_model/PROVENANCE.md` before quoting a rate.
+The spread within a strip is the seed being re-rolled, not diffusion noise. Cells
+are not uniformly sampled, a hit is RMSD < 2 Å alone rather than the benchmark's
+stricter combined criterion, and Protenix has only been run on 8SGE — read
+`data/cross_model/PROVENANCE.md` before quoting a rate.
 
 ## There are two answers, not a spread
 
