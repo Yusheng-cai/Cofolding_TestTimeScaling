@@ -54,7 +54,7 @@ are not uniformly sampled, a hit is RMSD < 2 Å alone rather than the benchmark'
 stricter combined criterion, and Protenix has only been run on 8SGE — read
 `data/cross_model/PROVENANCE.md` before quoting a rate.
 
-## There are two answers, not a spread
+## The two-dimensional distribution of lDDT-PLI and ligand RMSD
 
 ![lDDT-PLI against ligand RMSD, three models](results/figures/landscape.png)
 
@@ -63,9 +63,10 @@ number of placements, commit early, and are often confident and wrong.
 
 300 poses on 8SGE, same molecule, same pocket and same MSA for all three models
 (each at its own default recycling, so this is three published models, not a
-controlled compute comparison). The RMSD marginal has two lobes with almost nothing between them: 0, 2 and 13 of 100 draws
-land in the 2.5–5 Å gap. **Colour is the axial torsion** C12–C11–N1–C3 — the two
-lobes are the two rotamers of one hindered bond, and the model picks one.
+controlled compute comparison). The RMSD marginal has two lobes with almost
+nothing between them: 0, 2 and 13 of 100 draws land in the 2.5–5 Å gap.
+**Colour is the axial torsion** C12–C11–N1–C3 — the two lobes are the two
+rotamers of one hindered bond, and the model picks one.
 
 Two things fall out of that panel and set up everything else here:
 
