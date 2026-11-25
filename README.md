@@ -122,7 +122,7 @@ and silently do nothing; the runner refuses any other version unless you pass
 
 ## Notebooks
 
-Four, self-contained, no GPU — `numpy`, `matplotlib` and this package over committed
+Five, self-contained, no GPU — `numpy`, `matplotlib` and this package over committed
 data.
 
 | notebook | what it shows |
@@ -131,6 +131,7 @@ data.
 | `02_baselines.ipynb` | the unperturbed rate on four systems, with familiarity beside it |
 | `03_tcp_arms.ipynb` | Boltz-Perturb's TCP against ours, and the frozen control |
 | `04_committor.ipynb` | the committor along the hindered axis, and the tilt of the landscape |
+| `05_slig_gauss.ipynb` | where the noise goes: the hook, the tensor it writes, and what that is worth |
 
 ## What is in here
 

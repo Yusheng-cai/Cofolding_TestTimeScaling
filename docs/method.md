@@ -12,6 +12,13 @@ diffusion. Nothing before it changes and nothing after it is touched. The protei
 rows are left exactly as the trunk produced them, which is why the fold is
 unaffected and only the ligand moves.
 
+Concretely, `AtomDiffusion.sample` is patched and the ligand rows of its `s_trunk`
+argument are overwritten before the original is called: one write, before the first
+denoising step, re-read unchanged at each of the 200 steps. Notebook
+`05_slig_gauss.ipynb` draws this — `results/figures/nb05_hook.png` for the hand-off
+and `nb05_block.png` for the block — reproduces the arithmetic in four lines of
+numpy, and checks that version against the shipped hook.
+
 ## The four interventions
 
 Each answers a different question, which is why more than one exists.
