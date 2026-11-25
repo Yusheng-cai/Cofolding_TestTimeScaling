@@ -34,25 +34,25 @@ decides it. What to *do* about it is a separate question, and not this README's;
 
 ![every scored draw, eight systems, three models](results/figures/cross_model.png)
 
-645 unperturbed draws, 8 deposited complexes, 3 models, no oracle — every one of
-them drawn, because the shape of a strip says what a hit rate cannot.
+Sample a system enough times and you sometimes get the right answer and sometimes
+the wrong one — and the wrong one is often the dominant basin. Over 16
+(system, model) cells and 645 unperturbed draws: in 4 the crystal pose is what you
+usually draw, in 5 it is in there but rare, and in 7 no draw ever reached it.
 
-- **In 5 of the 16 cells the crystal pose is already there, and rare.** 10 of 25 on
-  8CJG under Boltz-2 against a 5.7 Å median; 19 of 100 and 1 of 100 on 8SGE. Nothing
-  is missing from those models. Which draw you get is the whole of the difference,
-  and that is a search problem.
-- **In 7 cells no draw ever came within 2 Å** — closest 2.10 Å, Boltz-2 on 8JMP.
-  Nothing here says the answer is reachable in those, in either direction.
-- **A tight clump far from the crystal is not uncertainty.** 7FTM's 25 draws span
-  0.99 Å about a median of 31 Å. Drawing again returns the same wrong answer.
-- **Familiarity, on the right axis, does not order the outcome here.** These eight
-  were picked for being hard, so read that as a population trend giving no grip on
-  an individual complex, not as a count against it.
+The middle five are the point. 10 of 25 draws on 8CJG under Boltz-2 come in under
+2 Å against a 5.7 Å median; on 8SGE it is 19 of 100 under AlphaFold3 and 1 of 100
+under Boltz-2. Nothing is missing from those models — which draw you get is the
+whole of the difference, and that is a search problem. The other side of it is the
+7 empty cells, where nothing says the answer is reachable at all (closest
+2.10 Å, Boltz-2 on 8JMP), and 7FTM, whose 25 draws span 0.99 Å about a median
+of 31 Å: drawing again returns the same wrong answer, not a different one.
 
-The spread within a strip is the seed being re-rolled, not diffusion noise. Cells
-are not uniformly sampled, a hit is RMSD < 2 Å alone rather than the benchmark's
-stricter combined criterion, and Protenix has only been run on 8SGE — read
-`data/cross_model/PROVENANCE.md` before quoting a rate.
+The spread within a strip is the seed being re-rolled, not diffusion noise.
+Familiarity, on the right axis, does not order the outcome across these eight,
+which were picked for being hard. Cells are not uniformly sampled, a hit is
+RMSD < 2 Å alone rather than the benchmark's stricter combined criterion, and
+Protenix has only been run on 8SGE — read `data/cross_model/PROVENANCE.md` before
+quoting a rate.
 
 ## The two-dimensional distribution of lDDT-PLI and ligand RMSD
 
