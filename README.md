@@ -122,11 +122,12 @@ and silently do nothing; the runner refuses any other version unless you pass
 
 ## Notebooks
 
-Five, self-contained, no GPU — `numpy`, `matplotlib` and this package over committed
-data.
+Six, self-contained, no GPU — `numpy`, `matplotlib` and this package over committed
+data. Read `00` first; it says what the system is and what the error looks like.
 
 | notebook | what it shows |
 | --- | --- |
+| `00_the_system.ipynb` | what 8SGE is, where the ligand binds, and what Boltz-2 gets wrong about it |
 | `01_baseline.ipynb` | the failure on 8SGE, recomputed from coordinates |
 | `02_baselines.ipynb` | the unperturbed rate on four systems, with familiarity beside it |
 | `03_tcp_arms.ipynb` | Boltz-Perturb's TCP against ours, and the frozen control |
