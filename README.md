@@ -131,7 +131,7 @@ data.
 | `02_baselines.ipynb` | the unperturbed rate on four systems, with familiarity beside it |
 | `03_tcp_arms.ipynb` | Boltz-Perturb's TCP against ours, and the frozen control |
 | `04_committor.ipynb` | the committor along the hindered axis, and the tilt of the landscape |
-| `05_slig_gauss.ipynb` | where the noise goes: the hook, the tensor it writes, and what that is worth |
+| `05_slig_gauss.ipynb` | where the noise goes: the hook, the tensor it writes, what that is worth, and the step-140 write beside it |
 
 ## What is in here
 
